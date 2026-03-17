@@ -209,7 +209,8 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
     const fetchLocations = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:5000/api/locations', {
+        const apiBase = 'https://kgmps-production.up.railway.app';
+        const res = await axios.get(`${apiBase}/api/locations`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.data.length > 0) {
@@ -227,7 +228,8 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/production/mrp', {
+      const apiBase = 'https://kgmps-production.up.railway.app';
+      const res = await axios.get(`${apiBase}/api/production/mrp`, {
         params: {
           location: selectedLocation,
           startDate: '2026-03-17',

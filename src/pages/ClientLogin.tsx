@@ -15,7 +15,8 @@ const ClientLogin: React.FC<ClientLoginProps> = ({ onLogin, onAdminSwitch }) => 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', {
+      const apiBase = 'https://kgmps-production.up.railway.app';
+      const res = await axios.post(`${apiBase}/api/auth/login`, {
         username,
         password,
         tenantID: selectedTenant
