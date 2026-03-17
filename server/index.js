@@ -8,6 +8,7 @@ import pg from 'pg';
 const { Pool } = pg;
 import Redis from 'ioredis';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 dotenv.config();
@@ -27,7 +28,6 @@ console.log('REDIS_URL Mevcut mu?:', !!process.env.REDIS_URL);
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
-import fs from 'fs';
 if (fs.existsSync(distPath)) {
     console.log('✅ "dist" klasörü bulundu.');
     if (fs.existsSync(path.join(distPath, 'index.html'))) {
