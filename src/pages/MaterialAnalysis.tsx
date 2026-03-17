@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
   RefreshCw, Truck, Search, 
-  LayoutGrid, Boxes
+  LayoutGrid, Boxes, AlertCircle, CheckCircle2
 } from 'lucide-react';
-import '../styles/glass.css';
+import '../styles/professional.css';
 
 interface MrpItem {
   SipNo: string;
@@ -30,26 +30,35 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'CRITICAL' | 'OK'>('ALL');
   const [groupBy, setGroupBy] = useState<'ORDER' | 'MATERIAL'>('ORDER');
+  const [error, setError] = useState<string | null>(null);
 
   const apiBase = 'https://kgmps-production.up.railway.app';
 
   const fetchLocations = async () => {
     try {
-      console.log(`Fetching locations for tenant ${tenantId}...`);
+      setError(null);
       const token = localStorage.getItem('token');
+      console.log('Fetching locations with token:', token ? 'Exists' : 'Missing');
       const res = await axios.get(`${apiBase}/api/locations`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('Locations received:', res.data);
       setLocations(res.data);
-      if (res.data.length > 0 && !selectedLocation) setSelectedLocation(res.data[0]);
-    } catch (err) {
+      if (res.data.length > 0) {
+        setSelectedLocation(res.data[0]);
+      } else {
+        setError('Lokasyon bulunamadı. Lütfen veritabanınızı kontrol edin.');
+      }
+    } catch (err: any) {
       console.error("Lokasyonlar çekilemedi:", err);
+      setError(`Bağlantı hatası: ${err.response?.data?.error || err.message}`);
     }
   };
 
   const fetchMrpAnalysis = useCallback(async () => {
     if (!selectedLocation) return;
     setLoading(true);
+    setError(null);
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(`${apiBase}/api/production/mrp`, {
@@ -61,8 +70,10 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setMrpData(res.data);
-    } catch (err) {
+      console.log('MRP data received:', res.data.length, 'records');
+    } catch (err: any) {
       console.error("MRP Analizi başarısız:", err);
+      setError(`Veri çekilemedi: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
     }
@@ -76,7 +87,6 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId }) => {
     if (selectedLocation) fetchMrpAnalysis();
   }, [selectedLocation, fetchMrpAnalysis]);
 
-  // Grouping Logic
   const processedData = useMemo(() => {
     const filtered = mrpData.filter(item => {
       const matchesSearch = item.HamAd.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -112,167 +122,177 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId }) => {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'transparent', padding: '20px', overflow: 'hidden' }}>
-      {/* Sub Header (Filters & Stats) */}
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
-        <div className="glass-card" style={{ flex: 1, padding: '15px 25px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '5px 15px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '2px' }}>DEPO / LOKASYON</label>
-                    <select 
-                        value={selectedLocation} 
-                        onChange={(e) => setSelectedLocation(e.target.value)}
-                        style={{ background: 'transparent', border: 'none', color: '#00f2fe', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}
-                    >
-                        {locations.map(loc => <option key={loc} value={loc} style={{ background: '#1e293b' }}>{loc}</option>)}
-                    </select>
-                </div>
-                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '10px' }}>
-                     <ViewToggleButton active={groupBy === 'ORDER'} onClick={() => setGroupBy('ORDER')} label="Üretim Emri Bazlı" />
-                     <ViewToggleButton active={groupBy === 'MATERIAL'} onClick={() => setGroupBy('MATERIAL')} label="Hammadde Bazlı" />
-                </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={fetchMrpAnalysis} className="glass-button" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Listeyi Yenile
-                </button>
-            </div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden' }}>
+      {/* Search & Feedback Area */}
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#dc2626', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}>
+          <AlertCircle size={18} /> {error}
+          <button onClick={fetchLocations} className="pro-button" style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: '12px' }}>Yeniden Dene</button>
         </div>
+      )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 150px)', gap: '10px' }}>
-            <MiniStatCard label="Eksik" value={stats.criticalCount} color="#ef4444" />
-            <MiniStatCard label="Tamam" value={stats.okCount} color="#10b981" />
-            <MiniStatCard label="Toplam" value={stats.totalItems} color="#94a3b8" />
-            <MiniStatCard label="Açık Mik." value={stats.totalShortage.toLocaleString()} color="#facc15" />
-        </div>
-      </div>
+      {/* Control Panel */}
+      <div className="pro-card" style={{ padding: '16px 24px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+          <div>
+            <label style={{ fontSize: '11px', color: '#64748b', fontWeight: '800', display: 'block', marginBottom: '4px' }}>LOKASYON / DEPO</label>
+            <select 
+              className="pro-input"
+              style={{ width: '180px', padding: '6px 12px', fontWeight: '600' }}
+              value={selectedLocation} 
+              onChange={(e) => setSelectedLocation(e.target.value)}
+            >
+              {locations.length === 0 && <option value="">Yükleniyor...</option>}
+              {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+            </select>
+          </div>
 
-      {/* Main Grid View */}
-      <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.1)' }}>
-          <div style={{ display: 'flex', gap: '15px' }}>
-             <div className="search-box" style={{ position: 'relative' }}>
-                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                <input 
-                  className="glass-input" 
-                  placeholder="Ara..." 
-                  style={{ paddingLeft: '35px', marginBottom: 0, width: '250px', fontSize: '13px', height: '36px' }}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-             </div>
-             <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', padding: '3px' }}>
-                <FilterButton active={filterStatus === 'ALL'} onClick={() => setFilterStatus('ALL')} label="Tümü" />
-                <FilterButton active={filterStatus === 'CRITICAL'} onClick={() => setFilterStatus('CRITICAL')} label="Sadece Eksikler" color="#ef4444" />
-             </div>
+          <div style={{ width: '1px', height: '32px', background: '#e2e8f0' }} />
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <ViewTab active={groupBy === 'ORDER'} onClick={() => setGroupBy('ORDER')} icon={<LayoutGrid size={14} />} label="Sipariş Bazlı" />
+            <ViewTab active={groupBy === 'MATERIAL'} onClick={() => setGroupBy('MATERIAL'} icon={<Boxes size={14} />} label="Hammadde Bazlı" />
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
-            {processedData.map((group: any, gIdx: number) => (
-                <div key={gIdx} style={{ marginBottom: '15px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px 12px 0 0' }}>
-                        {groupBy === 'ORDER' ? <LayoutGrid size={16} color="#00f2fe" /> : <Boxes size={16} color="#facc15" />}
-                        <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '14px' }}>
-                            {groupBy === 'ORDER' ? `Sipari: ${group.orderNo}` : `Malzeme: ${group.matCode}`}
-                        </span>
-                        <span style={{ color: '#64748b', fontSize: '13px' }}>
-                            {groupBy === 'ORDER' ? group.productName : group.matName}
-                        </span>
-                        <div style={{ marginLeft: 'auto', fontSize: '11px', color: '#10b981', fontWeight: 'bold' }}>
-                            {group.items.length} Kalem
-                        </div>
-                    </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead>
-                            <tr style={{ background: 'rgba(0,0,0,0.1)' }}>
-                                <th style={thTinyStyle}>HAMMADDE</th>
-                                <th style={thTinyStyle}>GEREKEN</th>
-                                <th style={thTinyStyle}>STOK</th>
-                                <th style={thTinyStyle}>KÖPRÜ / YOLDA</th>
-                                <th style={thTinyStyle}>DURUM</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {group.items.map((item: MrpItem, iIdx: number) => {
-                                const isShortage = item.HamStok < item.GerekenMik;
-                                return (
-                                    <tr key={iIdx} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                                        <td style={tdTinyStyle}>
-                                            <div style={{ fontWeight: '600' }}>{item.HamAd}</div>
-                                            <div style={{ fontSize: '10px', color: '#64748b' }}>{item.HamKod}</div>
-                                        </td>
-                                        <td style={tdTinyStyle}>{item.GerekenMik.toLocaleString()}</td>
-                                        <td style={tdTinyStyle}>{item.HamStok.toLocaleString()}</td>
-                                        <td style={tdTinyStyle}>
-                                            {item.YoldakiMik > 0 ? (
-                                                <div style={{ color: '#facc15', fontSize: '11px' }}>
-                                                    <Truck size={12} /> {item.YoldakiMik.toLocaleString()} ({new Date(item.TedarikTarihi!).toLocaleDateString()})
-                                                </div>
-                                            ) : '-'}
-                                        </td>
-                                        <td style={tdTinyStyle}>
-                                            <span style={{ color: isShortage ? '#ef4444' : '#10b981', fontWeight: 'bold', fontSize: '11px' }}>
-                                                {isShortage ? `EKSİK: ${(item.GerekenMik - item.HamStok).toLocaleString()}` : 'HAZIR'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <MiniStatCard label="Eksik" value={stats.criticalCount} color="#ef4444" />
+          <MiniStatCard label="Tamam" value={stats.okCount} color="#10b981" />
+          <MiniStatCard label="Açık" value={stats.totalShortage.toLocaleString()} color="#f59e0b" />
+          <button onClick={fetchMrpAnalysis} className="pro-button" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px' }}>
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Güncelle
+          </button>
+        </div>
+      </div>
+
+      {/* Grid Container */}
+      <div className="pro-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input 
+              className="pro-input" 
+              placeholder="Sipariş veya Malzeme Ara..." 
+              style={{ paddingLeft: '36px', width: '300px' }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <FilterBtn active={filterStatus === 'ALL'} onClick={() => setFilterStatus('ALL')} label="Tümü" />
+            <FilterBtn active={filterStatus === 'CRITICAL'} onClick={() => setFilterStatus('CRITICAL')} label="Kritik Eksikler" color="#ef4444" />
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {processedData.length === 0 && !loading && (
+            <div style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>
+              <Search size={48} style={{ marginBottom: '16px', opacity: 0.2 }} />
+              <div>Kayıt bulunamadı. Lütfen lokasyon seçin veya aramayı değiştirin.</div>
+            </div>
+          )}
+          
+          {processedData.map((group: any, idx: number) => (
+            <div key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ padding: '12px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {groupBy === 'ORDER' ? <LayoutGrid size={16} color="#3b82f6" /> : <Boxes size={16} color="#f59e0b" />}
+                <span style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b' }}>
+                  {groupBy === 'ORDER' ? `Sipariş: ${group.orderNo}` : `Malzeme: ${group.matCode}`}
+                </span>
+                <span style={{ fontSize: '13px', color: '#64748b' }}>
+                  {groupBy === 'ORDER' ? group.productName : group.matName}
+                </span>
+                <div style={{ marginLeft: 'auto', background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
+                  {group.items.length} Kalem
                 </div>
-            ))}
+              </div>
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>Hammadde</th>
+                    <th>Gereken</th>
+                    <th>Stok</th>
+                    <th>Açık</th>
+                    <th>Durum</th>
+                    <th>Tedarik / Yolda</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.items.map((item: MrpItem, iIdx: number) => {
+                    const isShortage = item.HamStok < item.GerekenMik;
+                    return (
+                      <tr key={iIdx}>
+                        <td>
+                          <div style={{ fontWeight: '600' }}>{item.HamAd}</div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>{item.HamKod}</div>
+                        </td>
+                        <td>{item.GerekenMik.toLocaleString()}</td>
+                        <td>{item.HamStok.toLocaleString()}</td>
+                        <td style={{ color: isShortage ? '#dc2626' : 'inherit', fontWeight: isShortage ? '700' : 'normal' }}>
+                          {isShortage ? (item.GerekenMik - item.HamStok).toLocaleString() : '0'}
+                        </td>
+                        <td>
+                          <span className={`pro-badge ${isShortage ? 'pro-badge-error' : 'pro-badge-success'}`}>
+                            {isShortage ? 'EKSİK' : 'OK'}
+                          </span>
+                        </td>
+                        <td>
+                          {item.YoldakiMik > 0 ? (
+                            <div style={{ fontSize: '12px' }}>
+                              <div style={{ color: '#0369a1', fontWeight: '600' }}>
+                                <Truck size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+                                {item.YoldakiMik.toLocaleString()} Bekliyor
+                              </div>
+                              <div style={{ color: '#64748b', fontSize: '10px' }}>
+                                Termin: {new Date(item.TedarikTarihi!).toLocaleDateString()}
+                              </div>
+                            </div>
+                          ) : <span style={{ color: '#cbd5e1' }}>-</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 };
 
-const MiniStatCard = ({ label, value, color }: { label: string, value: any, color: string }) => (
-    <div className="glass-card" style={{ padding: '10px 15px', textAlign: 'center' }}>
-        <div style={{ fontSize: '10px', color: '#64748b' }}>{label}</div>
-        <div style={{ fontSize: '14px', fontWeight: 'bold', color }}>{value}</div>
-    </div>
-);
-
-const ViewToggleButton = ({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) => (
-    <button 
-        onClick={onClick}
-        style={{ 
-            padding: '6px 15px', 
-            borderRadius: '8px', 
-            border: 'none', 
-            background: active ? 'rgba(255,255,255,0.1)' : 'transparent',
-            color: active ? '#00f2fe' : '#64748b',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-        }}
-    >
-        {label}
-    </button>
-);
-
-const FilterButton = ({ active, onClick, label, color = '#fff' }: { active: boolean, onClick: () => void, label: string, color?: string }) => (
+const ViewTab = ({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: any, label: string }) => (
   <button 
     onClick={onClick}
-    style={{ 
-      padding: '5px 15px', 
-      borderRadius: '8px', 
-      border: 'none', 
-      background: active ? 'rgba(255,255,255,0.1)' : 'transparent',
-      color: active ? color : '#64748b',
-      fontSize: '11px',
-      fontWeight: 'bold',
-      cursor: 'pointer'
+    style={{
+      display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 16px', borderRadius: '6px', border: 'none',
+      background: active ? '#fff' : 'transparent', color: active ? '#2563eb' : '#64748b',
+      boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', fontWeight: '600', fontSize: '13px', cursor: 'pointer'
+    }}
+  >
+    {icon} {label}
+  </button>
+);
+
+const MiniStatCard = ({ label, value, color }: { label: string, value: any, color: string }) => (
+  <div style={{ padding: '0 16px', textAlign: 'center', borderRight: '1px solid #e2e8f0' }}>
+    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>{label}</div>
+    <div style={{ fontSize: '16px', fontWeight: '800', color }}>{value}</div>
+  </div>
+);
+
+const FilterBtn = ({ active, onClick, label, color = '#2563eb' }: { active: boolean, onClick: () => void, label: string, color?: string }) => (
+  <button 
+    onClick={onClick}
+    style={{
+      padding: '4px 16px', borderRadius: '6px', border: active ? `1px solid ${color}` : '1px solid #e2e8f0',
+      background: active ? `${color}11` : '#fff', color: active ? color : '#64748b',
+      fontWeight: '700', fontSize: '12px', cursor: 'pointer'
     }}
   >
     {label}
   </button>
 );
-
-const thTinyStyle: React.CSSProperties = { padding: '10px 20px', fontSize: '10px', color: '#64748b', borderBottom: '1px solid rgba(255,255,255,0.05)' };
-const tdTinyStyle: React.CSSProperties = { padding: '10px 20px', fontSize: '12px', color: '#cbd5e1' };
 
 export default MaterialAnalysis;

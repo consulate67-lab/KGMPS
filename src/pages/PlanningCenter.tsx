@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { 
   ArrowLeft, Activity, 
-  Package, TrendingUp, Settings 
+  Package, TrendingUp, Settings,
+  LogOut
 } from 'lucide-react';
 import MaterialAnalysis from './MaterialAnalysis';
 import MpsPlanner from './MpsPlanner';
-import '../styles/glass.css';
+import '../styles/professional.css';
 
 interface PlanningCenterProps {
   tenantId: number | null;
@@ -16,48 +17,59 @@ const PlanningCenter: React.FC<PlanningCenterProps> = ({ tenantId, onBack }) => 
   const [activeTab, setActiveTab] = useState<'MRP' | 'GANTT' | 'KPI'>('MRP');
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0f172a', overflow: 'hidden' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f8fafc', overflow: 'hidden' }}>
       {/* Top Main Nav */}
       <div style={{ 
-        background: 'rgba(30, 41, 59, 0.7)', 
-        borderBottom: '1px solid rgba(255,255,255,0.05)', 
-        padding: '10px 20px',
+        background: '#0f172a', 
+        padding: '12px 24px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backdropFilter: 'blur(10px)'
+        color: 'white',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        zIndex: 100
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <button onClick={onBack} className="glass-button" style={{ padding: '8px' }}><ArrowLeft size={18} /></button>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff' }}>PLANLAMA MERKEZİ</span>
-            <span style={{ fontSize: '12px', color: '#64748b' }}>v2.0 Beta</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <button onClick={onBack} title="Geri Dön" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex' }}>
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: '800', letterSpacing: '0.5px' }}>PLANLAMA MERKEZİ</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8' }}>Üretim ve Malzeme Yönetim Paneli</div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '12px' }}>
+        <div style={{ display: 'flex', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '12px' }}>
           <TabButton 
             active={activeTab === 'MRP'} 
             onClick={() => setActiveTab('MRP')} 
             icon={<Package size={16} />} 
-            label="Hammadde Değerlendirme & MRP" 
+            label="Hammadde & MRP" 
           />
           <TabButton 
             active={activeTab === 'GANTT'} 
             onClick={() => setActiveTab('GANTT')} 
             icon={<Activity size={16} />} 
-            label="Üretim Çizelgeleme (Gantt)" 
+            label="Üretim Çizelgeleme" 
           />
           <TabButton 
             active={activeTab === 'KPI'} 
             onClick={() => setActiveTab('KPI')} 
             icon={<TrendingUp size={16} />} 
-            label="Performans (KPI)" 
+            label="Analitik & OEE" 
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
-             <button className="glass-button" style={{ padding: '8px' }} title="Ayarlar"><Settings size={18} /></button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+             <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><Settings size={20} /></button>
+             <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.1)' }} />
+             <div style={{ textAlign: 'right', display: 'none' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600' }}>Selim Yılmaz</div>
+                <div style={{ fontSize: '10px', color: '#94a3b8' }}>Admin</div>
+             </div>
+             <button onClick={onBack} className="pro-button" style={{ padding: '8px 12px', background: '#ef4444', display: 'flex', gap: '8px' }}>
+                <LogOut size={16} /> Çıkış
+             </button>
         </div>
       </div>
 
@@ -77,11 +89,16 @@ const PlanningCenter: React.FC<PlanningCenterProps> = ({ tenantId, onBack }) => 
         )}
 
         {activeTab === 'KPI' && (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="glass-card" style={{ padding: '60px', textAlign: 'center' }}>
-              <TrendingUp size={60} color="#64748b" style={{ marginBottom: '20px' }} />
-              <h3 style={{ color: '#fff', fontSize: '24px', margin: '0 0 10px 0' }}>KPI Dashboard</h3>
-              <p style={{ color: '#64748b' }}>Performans metrikleri ve OEE analizleri yakında eklenecek.</p>
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+            <div style={{ textAlign: 'center', maxWidth: '400px' }}>
+              <div style={{ width: '80px', height: '80px', background: '#f1f5f9', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+                <TrendingUp size={40} color="#64748b" />
+              </div>
+              <h3 style={{ color: '#0f172a', fontSize: '24px', margin: '0 0 10px 0' }}>KPI Dashboard</h3>
+              <p style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.6' }}>
+                Üretim performans verileri, makine duruş analizleri ve OEE metrikleri bu alanda listelenecek.
+              </p>
+              <button className="pro-button" style={{ marginTop: '20px' }}>Verileri Yenile</button>
             </div>
           </div>
         )}
@@ -93,6 +110,7 @@ const PlanningCenter: React.FC<PlanningCenterProps> = ({ tenantId, onBack }) => 
 const TabButton = ({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: any, label: string }) => (
   <button 
     onClick={onClick}
+    className={active ? '' : 'pro-button-outline'}
     style={{
       display: 'flex',
       alignItems: 'center',
@@ -100,13 +118,12 @@ const TabButton = ({ active, onClick, icon, label }: { active: boolean, onClick:
       padding: '8px 20px',
       borderRadius: '8px',
       border: 'none',
-      background: active ? 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' : 'transparent',
-      color: active ? '#000' : '#94a3b8',
+      background: active ? '#2563eb' : 'transparent',
+      color: active ? '#fff' : '#94a3b8',
       fontWeight: '600',
       fontSize: '13px',
       cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      boxShadow: active ? '0 4px 15px rgba(0, 242, 254, 0.2)' : 'none'
+      transition: 'all 0.2s ease',
     }}
   >
     {icon}
