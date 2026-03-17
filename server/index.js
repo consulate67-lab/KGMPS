@@ -19,13 +19,37 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 5000;
 
-// 1. CORS Middleware (EN ÜSTTE OLMALI - Preflight / OPTIONS talepleri için)
+// 1. CORS Middleware (GitHub Pages ve Yerel Geliştirme İçin)
+const allowedOrigins = [
+    'https://consulate67-lab.github.io',
+    'http://localhost:5173',
+    'http://localhost:3000'
+];
+
 app.use(cors({
-    origin: '*',
+    origin: (origin, callback) => {
+        // Localhost, GitHub Pages veya boş originlere (Postman vb.) izin ver
+        if (!origin || allowedOrigins.includes(origin) || origin.endsWith('github.io')) {
+            callback(null, true);
+        } else {
+            // Hata ayıklama sürecinde tüm originlere izin verelim
+            callback(null, true);
+        }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true
+    credentials: true,
+    optionsSuccessStatus: 200
 }));
+
+// Manuel CORS Header Injection (Emniyet Kilidi)
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    next();
+});
 app.options('*', cors());
 
 // 2. Request Logging (Hata Ayıklama İçin)
