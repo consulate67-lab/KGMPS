@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import { 
   Users, Building2, ShieldAlert, CheckCircle2, 
@@ -29,36 +29,7 @@ interface Tenant {
   users: TenantUser[];
 }
 
-const initialTenants: Tenant[] = [
-  { 
-    id: 1, 
-    name: 'Cabani Kundura', 
-    host: '192.168.1.3', 
-    db: 'Uretim', 
-    licenseEnd: '2026-03-25', 
-    status: 'Aktif',
-    email: 'info@cabani.com.tr',
-    adminUser: 'cabani_admin',
-    adminPass: 'admin123',
-    processes: ['Enjeksiyon', 'Montaj', 'Kalıphane'],
-    users: [
-      { id: 101, username: 'selimkorgun', role: 'Admin', email: 'selim@korgun.com.tr' }
-    ]
-  },
-  { 
-    id: 2, 
-    name: 'Örnek Plastik Ltd.', 
-    host: '92.110.45.12', 
-    db: 'ERP_TEST', 
-    licenseEnd: '2026-12-31', 
-    status: 'Aktif',
-    email: 'destek@ornekplastik.com',
-    adminUser: 'ornek_user',
-    adminPass: 'ornek88',
-    processes: ['Enjeksiyon', 'Boya'],
-    users: []
-  }
-];
+const initialTenants: Tenant[] = [];
 
 const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
   const [tenants, setTenants] = useState<Tenant[]>(initialTenants);
@@ -67,11 +38,40 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
-  
+
   // Yeni kullanıcı form state'leri
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
+
+  const apiBase = 'https://kgmps-production.up.railway.app';
+
+  // Verileri Backend'den Çek
+  const fetchTenants = async () => {
+    try {
+      const res = await axios.get(`${apiBase}/api/admin/tenants`);
+      setTenants(res.data);
+    } catch (err) {
+      console.error('Firmalar yüklenemedi:', err);
+    }
+  };
+
+  const fetchUsers = async (tenantId: number) => {
+    try {
+      const res = await axios.get(`${apiBase}/api/admin/tenants/${tenantId}/users`);
+      if (selectedTenant && selectedTenant.id === tenantId) {
+        setSelectedTenant({ ...selectedTenant, users: res.data });
+      }
+      // Ayrıca ana listedeki tenant'ı güncelle
+      setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, users: res.data } : t));
+    } catch (err) {
+      console.error('Personeller yüklenemedi:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchTenants();
+  }, []);
 
   const handleUpdateTenant = () => {
     if (editingTenant) {
@@ -226,7 +226,11 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                     <td style={{ textAlign: 'right', paddingRight: '15px' }}>
                       <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                         <button onClick={() => { setEditingTenant(t); setShowEditModal(true); }} className="glass-button action-btn" style={{ background: 'rgba(255,255,255,0.05)' }}><Edit2 size={14} /></button>
-                        <button onClick={() => { setSelectedTenant(t); setShowUserModal(true); }} className="glass-button action-btn" style={{ background: 'rgba(56, 189, 248, 0.15)' }}><Users size={14} /></button>
+                        <button onClick={() => { 
+                          setSelectedTenant(t); 
+                          setShowUserModal(true); 
+                          fetchUsers(t.id);
+                        }} className="glass-button action-btn" style={{ background: 'rgba(56, 189, 248, 0.15)' }}><Users size={14} /></button>
                         <button onClick={() => handleDeleteTenant(t.id)} className="glass-button action-btn" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}><Trash2 size={14} /></button>
                         <button onClick={onOpenPlanner} className="glass-button action-btn" style={{ background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe' }}><LayoutGrid size={14} /></button>
                       </div>

@@ -150,6 +150,37 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// Şirketleri Getir (Admin Paneli İçin)
+app.get('/api/admin/tenants', async (req, res) => {
+    try {
+        const result = await pgPool.query('SELECT tenant_id as id, firma_adi as name, db_host as host, db_name as db, license_end as "licenseEnd", is_active as status FROM system_tenants ORDER BY tenant_id');
+        
+        // Frontend formatına dönüştür (status: Aktif/Pasif)
+        const tenants = result.rows.map(t => ({
+            ...t,
+            status: t.status ? 'Aktif' : 'Pasif',
+            users: [] // Kullanıcılar modal açıldığında ayrıca çekilebilir veya join yapılabilir
+        }));
+        
+        res.json(tenants);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Şirket Personellerini Getir
+app.get('/api/admin/tenants/:id/users', async (req, res) => {
+    try {
+        const result = await pgPool.query(
+            'SELECT user_id as id, username, role FROM system_users WHERE tenant_id = $1',
+            [req.params.id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Personel Ekle (Admin Yetkisi)
 app.post('/api/admin/users', async (req, res) => {
     const { username, password, tenantId, role } = req.body;
