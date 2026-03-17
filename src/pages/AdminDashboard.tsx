@@ -147,24 +147,8 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: (id: number) => void
       });
 
       if (res.data.success) {
-        const newUser: TenantUser = {
-          id: res.data.userId,
-          username: newUserName,
-          email: newUserEmail,
-          role: 'Planlamaci'
-        };
-
-        setTenants(prev => prev.map(t => {
-          if (t.id === selectedTenant.id) {
-            return { ...t, users: [...t.users, newUser] };
-          }
-          return t;
-        }));
-
-        setSelectedTenant({
-          ...selectedTenant,
-          users: [...selectedTenant.users, newUser]
-        });
+        // Personelleri yeniden çekerek verinin gerçekten kaydedildiğini doğrula (Railway Live Sync)
+        await fetchUsers(selectedTenant.id);
 
         setNewUserName('');
         setNewUserEmail('');

@@ -77,23 +77,55 @@ pgPool.on('error', (err) => {
     console.error('PostgreSQL Beklenmedik Hata:', err);
 });
 
-// Veritabanı Otomatik Migrasyon (Eksik Sütunları Ekle)
+// Veritabanı Otomatik Migrasyon (Tablo ve Sütun Kontrolü)
 async function runMigrations() {
     try {
-        console.log('Veritabanı kontrol ediliyor...');
-        const migrations = [
+        console.log('Veritabanı kontrol süreci başlatıldı...');
+        
+        // 1. Tabloları Oluştur
+        const setupQueries = [
+            `CREATE TABLE IF NOT EXISTS system_tenants (
+                tenant_id SERIAL PRIMARY KEY,
+                firma_adi VARCHAR(255) NOT NULL,
+                db_host VARCHAR(255) NOT NULL,
+                db_name VARCHAR(100) NOT NULL,
+                db_user VARCHAR(100) NOT NULL,
+                db_pass VARCHAR(255) NOT NULL,
+                license_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                license_end TIMESTAMP NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                ins_dt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                upd_dt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS system_users (
+                user_id SERIAL PRIMARY KEY,
+                tenant_id INTEGER NOT NULL REFERENCES system_tenants(tenant_id),
+                username VARCHAR(50) NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                role VARCHAR(20) DEFAULT 'Planlamaci',
+                is_active BOOLEAN DEFAULT TRUE
+            )`
+        ];
+
+        for(let sql of setupQueries) {
+            await pgPool.query(sql);
+        }
+
+        // 2. Eksik Sütunları Ekle
+        const columnMigrations = [
             'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS email VARCHAR(255)',
             'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS admin_user VARCHAR(255)',
             'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS admin_pass VARCHAR(255)',
             'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS processes TEXT[]'
         ];
         
-        for(let sql of migrations) {
+        for(let sql of columnMigrations) {
             await pgPool.query(sql);
         }
-        console.log('✅ Veritabanı migrasyonu tamamlandı.');
+
+        console.log('✅ Veritabanı yapısı (Tablolar & Sütunlar) güncel.');
     } catch (err) {
-        console.error('❌ Migrasyon Hatası:', err.message);
+        console.error('❌ Migrasyon Hatası:', err);
     }
 }
 runMigrations();
