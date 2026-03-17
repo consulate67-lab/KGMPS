@@ -354,8 +354,9 @@ app.get('/api/locations', async (req, res) => {
     if (!authHeader) return res.status(401).send('Yetkisiz.');
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
+        const pool = await getTenantPool(decoded.tenantId);
         // Projenin ERP yapısına uygun olarak lokasyon tablosu si_lok olarak güncellendi
-        const result = await pool.request().query('SELECT location  as id, LName as name FROM location ORDER BY Location');
+        const result = await pool.request().query('SELECT location as id, LName as name FROM location ORDER BY Location');
         res.json(result.recordset);
     } catch (err) {
         console.error('❌ Lokasyon listesi hatası (Detailed):', {

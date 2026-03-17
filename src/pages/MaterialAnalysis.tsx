@@ -41,7 +41,9 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
   const [groupBy, setGroupBy] = useState<'ORDER' | 'MATERIAL'>('ORDER');
   const [error, setError] = useState<string | null>(null);
 
-  const apiBase = window.location.origin === 'http://localhost:5173' 
+  const isLocal = window.location.hostname === 'localhost';
+  const isGithub = window.location.hostname.includes('github.io');
+  const apiBase = (isLocal || isGithub) 
     ? 'https://kgmps-production.up.railway.app' 
     : window.location.origin;
 
