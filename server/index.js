@@ -24,7 +24,20 @@ console.log('DATABASE_URL Mevcut mu?:', !!(process.env.DATABASE_URL || process.e
 console.log('REDIS_URL Mevcut mu?:', !!process.env.REDIS_URL);
 
 // Production'da built dosyaları sunmak için
-app.use(express.static(path.join(__dirname, '../dist')));
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
+
+import fs from 'fs';
+if (fs.existsSync(distPath)) {
+    console.log('✅ "dist" klasörü bulundu.');
+    if (fs.existsSync(path.join(distPath, 'index.html'))) {
+        console.log('✅ "index.html" mevcut.');
+    } else {
+        console.error('❌ "index.html" BULUNAMADI!');
+    }
+} else {
+    console.error('❌ "dist" klasörü BULUNAMADI! Build işlemi başarısız olmuş olabilir.');
+}
 
 // --- Railway Entegrasyonu ---
 
@@ -32,6 +45,10 @@ app.use(express.static(path.join(__dirname, '../dist')));
 const pgPool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL,
     ssl: { rejectUnauthorized: false }
+});
+
+app.get('/', (req, res) => {
+    res.send('<h1>MPS API is Online</h1><p>Visit /api/health to check services.</p>');
 });
 
 pgPool.on('error', (err) => {
