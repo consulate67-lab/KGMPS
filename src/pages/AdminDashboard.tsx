@@ -20,6 +20,8 @@ interface Tenant {
   name: string;
   host: string;
   db: string;
+  dbUser: string;
+  dbPass: string;
   licenseEnd: string;
   status: 'Aktif' | 'Pasif';
   email: string;
@@ -31,7 +33,7 @@ interface Tenant {
 
 const initialTenants: Tenant[] = [];
 
-const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
+const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: (id: number) => void }) => {
   const [tenants, setTenants] = useState<Tenant[]>(initialTenants);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
@@ -85,32 +87,48 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
         alert('Yeni firma başarıyla eklendi.');
       }
     } catch (err: any) {
+      console.error('Firma ekleme hatası:', err);
       alert('Firma eklenirken hata: ' + (err.response?.data?.error || err.message));
     }
   };
 
-  const handleUpdateTenant = () => {
-    if (editingTenant) {
-      setTenants(prev => prev.map(t => t.id === editingTenant.id ? editingTenant : t));
-      setShowEditModal(false);
-    }
-  };
-
-  const handleDeleteTenant = (id: number) => {
-    if (window.confirm('Bu firmayı ve tüm verilerini silmek istediğinize emin misiniz?')) {
-      setTenants(prev => prev.filter(t => t.id !== id));
-    }
-  };
-
-  const handleRemoveUser = (tenantId: number, userId: number) => {
-    setTenants(prev => prev.map(t => {
-      if (t.id === tenantId) {
-        return { ...t, users: t.users.filter(u => u.id !== userId) };
+  const handleUpdateTenant = async () => {
+    if (!editingTenant) return;
+    try {
+      const res = await axios.put(`${apiBase}/api/admin/tenants/${editingTenant.id}`, editingTenant);
+      if (res.data.success) {
+        setShowEditModal(false);
+        fetchTenants();
+        alert('Firma başarıyla güncellendi.');
       }
-      return t;
-    }));
-    if (selectedTenant) {
-       setSelectedTenant({ ...selectedTenant, users: selectedTenant.users.filter(u => u.id !== userId) });
+    } catch (err: any) {
+      alert('Güncelleme hatası: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleDeleteTenant = async (id: number) => {
+    if (window.confirm('Bu firmayı ve tüm verilerini (kullanıcılar dahil) silmek istediğinize emin misiniz?')) {
+      try {
+        const res = await axios.delete(`${apiBase}/api/admin/tenants/${id}`);
+        if (res.data.success) {
+          fetchTenants();
+          alert('Firma silindi.');
+        }
+      } catch (err: any) {
+        alert('Silme hatası: ' + (err.response?.data?.error || err.message));
+      }
+    }
+  };
+
+  const handleRemoveUser = async (tenantId: number, userId: number) => {
+    if (!window.confirm('Bu personeli silmek istediğinize emin misiniz?')) return;
+    try {
+      const res = await axios.delete(`${apiBase}/api/admin/users/${userId}`);
+      if (res.data.success) {
+        fetchUsers(tenantId);
+      }
+    } catch (err: any) {
+      alert('Personel silme hatası: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -251,7 +269,7 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                           fetchUsers(t.id);
                         }} className="glass-button action-btn" style={{ background: 'rgba(56, 189, 248, 0.15)' }}><Users size={14} /></button>
                         <button onClick={() => handleDeleteTenant(t.id)} className="glass-button action-btn" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}><Trash2 size={14} /></button>
-                        <button onClick={onOpenPlanner} className="glass-button action-btn" style={{ background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe' }}><LayoutGrid size={14} /></button>
+                        <button onClick={() => onOpenPlanner(t.id)} className="glass-button action-btn" style={{ background: 'rgba(0, 242, 254, 0.15)', color: '#00f2fe' }}><LayoutGrid size={14} /></button>
                       </div>
                     </td>
                   </tr>
@@ -335,29 +353,104 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                    <div style={{ background: 'rgba(0, 242, 254, 0.03)', padding: '15px', borderRadius: '12px', borderLeft: '3px solid #00f2fe' }}>
                      <h4 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#64748b' }}>TEMEL BİLGİLER</h4>
-                     <label className="input-label">FİRMA ÜNVANI</label><input className="glass-input" defaultValue={editingTenant.name} />
-                     <label className="input-label">İLETİŞİM E-POSTA</label><input className="glass-input" defaultValue={editingTenant.email} />
+                     <label className="input-label">FİRMA ÜNVANI</label>
+                     <input 
+                        className="glass-input" 
+                        value={editingTenant.name} 
+                        onChange={e => setEditingTenant({...editingTenant, name: e.target.value})}
+                      />
+                     <label className="input-label">İLETİŞİM E-POSTA</label>
+                     <input 
+                        className="glass-input" 
+                        value={editingTenant.email} 
+                        onChange={e => setEditingTenant({...editingTenant, email: e.target.value})}
+                      />
                    </div>
 
                    <div style={{ background: 'rgba(79, 172, 254, 0.03)', padding: '15px', borderRadius: '12px', borderLeft: '3px solid #4facfe' }}>
                      <h4 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#64748b' }}>SQL SERVER BAĞLANTISI</h4>
                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                        <div><label className="input-label">HOST (IP)</label><input className="glass-input" defaultValue={editingTenant.host} /></div>
-                        <div><label className="input-label">DB ADI</label><input className="glass-input" defaultValue={editingTenant.db} /></div>
+                        <div>
+                          <label className="input-label">HOST (IP)</label>
+                          <input 
+                            className="glass-input" 
+                            value={editingTenant.host} 
+                            onChange={e => setEditingTenant({...editingTenant, host: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <label className="input-label">DB ADI</label>
+                          <input 
+                            className="glass-input" 
+                            value={editingTenant.db} 
+                            onChange={e => setEditingTenant({...editingTenant, db: e.target.value})}
+                          />
+                        </div>
+                     </div>
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+                        <div>
+                          <label className="input-label">SQL USER</label>
+                          <input 
+                            className="glass-input" 
+                            value={editingTenant.dbUser || ''} 
+                            onChange={e => setEditingTenant({...editingTenant, dbUser: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <label className="input-label">SQL PASS</label>
+                          <input 
+                            className="glass-input" 
+                            type="password"
+                            value={editingTenant.dbPass || ''} 
+                            onChange={e => setEditingTenant({...editingTenant, dbPass: e.target.value})}
+                          />
+                        </div>
                      </div>
                    </div>
 
                    <div style={{ background: 'rgba(16, 185, 129, 0.03)', padding: '15px', borderRadius: '12px', borderLeft: '3px solid #10b981' }}>
                      <h4 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#64748b' }}>LİSANS YÖNETİMİ</h4>
-                     <label className="input-label">LİSANS BİTİŞ TARİHİ</label><input className="glass-input" type="date" defaultValue={editingTenant.licenseEnd} />
+                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                       <div>
+                         <label className="input-label">DURUM</label>
+                         <select 
+                            className="glass-input" 
+                            value={editingTenant.status}
+                            onChange={e => setEditingTenant({...editingTenant, status: e.target.value as 'Aktif' | 'Pasif'})}
+                         >
+                           <option value="Aktif">Aktif</option>
+                           <option value="Pasif">Pasif</option>
+                         </select>
+                       </div>
+                       <div>
+                         <label className="input-label">LİSANS BİTİŞ</label>
+                         <input 
+                            className="glass-input" 
+                            type="date" 
+                            value={editingTenant.licenseEnd?.split('T')[0] || ''} 
+                            onChange={e => setEditingTenant({...editingTenant, licenseEnd: e.target.value})}
+                         />
+                       </div>
+                     </div>
                    </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                    <div style={{ background: 'rgba(240, 147, 251, 0.03)', padding: '15px', borderRadius: '12px', borderLeft: '3px solid #f093fb' }}>
                       <h4 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#64748b' }}>FİRMA GİRİŞ BİLGİLERİ</h4>
-                      <label className="input-label">ANA KULLANICI ADI (ERP)</label><input className="glass-input" defaultValue={editingTenant.adminUser} />
-                      <label className="input-label">GİRİŞ ŞİFRESİ</label><input className="glass-input" type="password" defaultValue={editingTenant.adminPass} />
+                      <label className="input-label">ANA KULLANICI ADI (ERP)</label>
+                      <input 
+                        className="glass-input" 
+                        value={editingTenant.adminUser || ''} 
+                        onChange={e => setEditingTenant({...editingTenant, adminUser: e.target.value})}
+                      />
+                      <label className="input-label">GİRİŞ ŞİFRESİ</label>
+                      <input 
+                        className="glass-input" 
+                        type="password" 
+                        value={editingTenant.adminPass || ''} 
+                        onChange={e => setEditingTenant({...editingTenant, adminPass: e.target.value})}
+                      />
                    </div>
 
                    <div style={{ background: 'rgba(250, 204, 21, 0.03)', padding: '15px', borderRadius: '12px', borderLeft: '3px solid #facc15' }}>
@@ -368,7 +461,14 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                            <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
                              <input 
                                 type="checkbox" 
-                                defaultChecked={editingTenant.processes.includes(p)}
+                                checked={(editingTenant.processes || []).includes(p)}
+                                onChange={e => {
+                                  const current = editingTenant.processes || [];
+                                  const next = e.target.checked 
+                                    ? [...current, p] 
+                                    : current.filter(item => item !== p);
+                                  setEditingTenant({...editingTenant, processes: next});
+                                }}
                                 style={{ accentColor: '#00f2fe' }}
                              /> {p}
                            </label>

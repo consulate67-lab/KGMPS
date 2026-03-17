@@ -8,29 +8,46 @@ type ViewState = 'CLIENT_LOGIN' | 'ADMIN_LOGIN' | 'DASHBOARD' | 'PLANNER';
 
 function App() {
   const [view, setView] = useState<ViewState>('CLIENT_LOGIN');
-  const [currentTenantId, setCurrentTenantId] = useState<number | null>(null);
+  const [targetTenantId, setTargetTenantId] = useState<number | null>(null);
+  const [isAdminSession, setIsAdminSession] = useState(false);
 
   return (
     <>
       {view === 'CLIENT_LOGIN' && (
         <ClientLogin 
-          onLogin={(id) => { setCurrentTenantId(id); setView('PLANNER'); }} 
+          onLogin={(id) => { 
+            setTargetTenantId(id); 
+            setIsAdminSession(false);
+            setView('PLANNER'); 
+          }} 
           onAdminSwitch={() => setView('ADMIN_LOGIN')} 
         />
       )}
       
       {view === 'ADMIN_LOGIN' && (
-        <AdminLogin onLogin={() => setView('DASHBOARD')} />
+        <AdminLogin onLogin={() => {
+          setIsAdminSession(true);
+          setView('DASHBOARD');
+        }} />
       )}
       
       {view === 'DASHBOARD' && (
-        <AdminDashboard onOpenPlanner={() => setView('PLANNER')} />
+        <AdminDashboard onOpenPlanner={(id) => { 
+          setTargetTenantId(id); 
+          setView('PLANNER'); 
+        }} />
       )}
       
       {view === 'PLANNER' && (
         <MpsPlanner 
-          tenantId={currentTenantId}
-          onBack={() => view === 'PLANNER' && currentTenantId ? setView('CLIENT_LOGIN') : setView('DASHBOARD')} 
+          tenantId={targetTenantId}
+          onBack={() => {
+            if (isAdminSession) {
+              setView('DASHBOARD');
+            } else {
+              setView('CLIENT_LOGIN');
+            }
+          }} 
         />
       )}
     </>

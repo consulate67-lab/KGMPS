@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import '../styles/glass.css';
 import { Building2, User, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
@@ -12,10 +12,25 @@ const ClientLogin: React.FC<ClientLoginProps> = ({ onLogin, onAdminSwitch }) => 
   const [selectedTenant, setSelectedTenant] = useState<number>(1);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [firms, setFirms] = useState<{id: number, name: string}[]>([]);
+  const apiBase = 'https://kgmps-production.up.railway.app';
+
+  useEffect(() => {
+    const fetchFirms = async () => {
+      try {
+        const res = await axios.get(`${apiBase}/api/public/tenants`);
+        setFirms(res.data);
+        if (res.data.length > 0) setSelectedTenant(res.data[0].id);
+      } catch (err) {
+        console.error('Firma listesi yüklenemedi:', err);
+      }
+    };
+    fetchFirms();
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const apiBase = 'https://kgmps-production.up.railway.app';
       const res = await axios.post(`${apiBase}/api/auth/login`, {
         username,
         password,
@@ -74,8 +89,10 @@ const ClientLogin: React.FC<ClientLoginProps> = ({ onLogin, onAdminSwitch }) => 
             value={selectedTenant}
             onChange={(e) => setSelectedTenant(Number(e.target.value))}
           >
-            <option value={1}>Cabani Kundura</option>
-            <option value={2}>Örnek Plastik Ltd.</option>
+            {firms.length === 0 && <option value="">Firmalar Yükleniyor...</option>}
+            {firms.map(f => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
           </select>
 
           <label style={{ color: '#cbd5e1', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>

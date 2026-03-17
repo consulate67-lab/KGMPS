@@ -19,11 +19,20 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 5000;
 
-// Health check (CORS öncesi en tepede)
-app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
+// 1. CORS Middleware (EN ÜSTTE OLMALI - Preflight / OPTIONS talepleri için)
+app.use(cors({
+    origin: '*', // Veya spesifik olarak: 'https://consulate67-lab.github.io'
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
+app.options('*', cors()); // Tüm OPTIONS taleplerine yanıt ver
 
-app.use(cors()); // En geniş izinli CORS
+// 2. Body Parser
 app.use(express.json());
+
+// 3. Health check (CORS sonrası)
+app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
 
 
@@ -65,12 +74,16 @@ pgPool.on('error', (err) => {
 async function runMigrations() {
     try {
         console.log('Veritabanı kontrol ediliyor...');
-        await pgPool.query(`
-            ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-            ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS admin_user VARCHAR(255);
-            ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS admin_pass VARCHAR(255);
-            ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS processes TEXT[];
-        `);
+        const migrations = [
+            'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS email VARCHAR(255)',
+            'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS admin_user VARCHAR(255)',
+            'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS admin_pass VARCHAR(255)',
+            'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS processes TEXT[]'
+        ];
+        
+        for(let sql of migrations) {
+            await pgPool.query(sql);
+        }
         console.log('✅ Veritabanı migrasyonu tamamlandı.');
     } catch (err) {
         console.error('❌ Migrasyon Hatası:', err.message);
@@ -99,7 +112,7 @@ async function getTenantPool(tenantID) {
     // Redis'te tenant ayarlarını kontrol et (Sürekli PG'ye gitmemek için)
     const cacheKey = `tenant:${tenantID}`;
     let tenantData = await redis.get(cacheKey);
-    
+
     if (tenantData) {
         tenantData = JSON.parse(tenantData);
     } else {
@@ -108,10 +121,10 @@ async function getTenantPool(tenantID) {
             'SELECT db_host, db_name, db_user, db_pass, license_end, is_active FROM system_tenants WHERE tenant_id = $1',
             [tenantID]
         );
-        
+
         if (result.rows.length === 0) throw new Error('Firma bulunamadı.');
         tenantData = result.rows[0];
-        
+
         // Redis'e yaz (1 saatlik cache)
         await redis.set(cacheKey, JSON.stringify(tenantData), 'EX', 3600);
     }
@@ -133,7 +146,7 @@ async function getTenantPool(tenantID) {
 
     const newPool = new mssql.ConnectionPool(tenantConfig);
     await newPool.connect();
-    
+
     tenantPools.set(tenantID, newPool);
     return newPool;
 }
@@ -152,16 +165,16 @@ app.post('/api/auth/login', async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'Hatalı kullanıcı veya firma seçimi.' });
         }
-        
+
         const user = result.rows[0];
         if (password !== user.password) {
             return res.status(401).json({ error: 'Hatalı şifre.' });
         }
 
-        const token = jwt.sign({ 
-            userId: user.user_id, 
-            tenantId: tenantID, 
-            role: user.role 
+        const token = jwt.sign({
+            userId: user.user_id,
+            tenantId: tenantID,
+            role: user.role
         }, process.env.JWT_SECRET || 'mps_secret_key', { expiresIn: '1d' });
 
         res.json({ token, role: user.role });
@@ -170,11 +183,21 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// Şirketleri Getir (Login Ekranı İçin - Sadece Ad ve Id)
+app.get('/api/public/tenants', async (req, res) => {
+    try {
+        const result = await pgPool.query('SELECT tenant_id as id, firma_adi as name FROM system_tenants WHERE is_active = true ORDER BY firma_adi');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Şirketleri Getir (Admin Paneli İçin)
 app.get('/api/admin/tenants', async (req, res) => {
     try {
-        const result = await pgPool.query('SELECT tenant_id as id, firma_adi as name, db_host as host, db_name as db, license_end as "licenseEnd", is_active as status, email, admin_user as "adminUser", admin_pass as "adminPass", processes FROM system_tenants ORDER BY tenant_id');
-        
+        const result = await pgPool.query('SELECT tenant_id as id, firma_adi as name, db_host as host, db_name as db, db_user as "dbUser", db_pass as "dbPass", license_end as "licenseEnd", is_active as status, email, admin_user as "adminUser", admin_pass as "adminPass", processes FROM system_tenants ORDER BY tenant_id');
+
         // Frontend formatına dönüştür
         const tenants = result.rows.map(t => ({
             ...t,
@@ -182,7 +205,7 @@ app.get('/api/admin/tenants', async (req, res) => {
             processes: t.processes || ['Enjeksiyon', 'Montaj'], // Varsayılan süreçler
             users: []
         }));
-        
+
         res.json(tenants);
     } catch (err) {
         console.error('Liste çekme hatası:', err);
@@ -194,15 +217,20 @@ app.get('/api/admin/tenants', async (req, res) => {
 app.post('/api/admin/tenants', async (req, res) => {
     const { name, host, db, dbUser, dbPass, email, licenseEnd } = req.body;
     try {
-        console.log('Firma ekleme isteği:', req.body);
+        console.log('Firma ekleme isteği:', { name, host, db, email });
+        
+        if (!name || !host || !db) {
+            return res.status(400).json({ error: 'Firma adı, host ve veritabanı adı zorunludur.' });
+        }
+
         const result = await pgPool.query(
             'INSERT INTO system_tenants (firma_adi, db_host, db_name, db_user, db_pass, email, license_end, processes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING tenant_id',
-            [name, host, db, dbUser || 'sa', dbPass, email, licenseEnd, ['Enjeksiyon', 'Montaj']]
+            [name, host, db, dbUser || 'sa', dbPass || '', email, licenseEnd || '2026-12-31', ['Enjeksiyon', 'Montaj']]
         );
         res.json({ success: true, tenantId: result.rows[0].tenant_id });
     } catch (err) {
-        console.error('Firma ekleme hatası:', err);
-        res.status(500).json({ error: err.message });
+        console.error('❌ Firma ekleme hatası (Route):', err);
+        res.status(500).json({ error: 'Sunucu hatası: ' + err.message });
     }
 });
 
@@ -234,6 +262,53 @@ app.post('/api/admin/users', async (req, res) => {
     }
 });
 
+// Şirket Bilgilerini Güncelle
+app.put('/api/admin/tenants/:id', async (req, res) => {
+    const { name, host, db, dbUser, dbPass, email, licenseEnd, adminUser, adminPass, processes, status } = req.body;
+    try {
+        const isActive = status === 'Aktif' || status === true;
+        await pgPool.query(
+            `UPDATE system_tenants SET 
+                firma_adi = $1, db_host = $2, db_name = $3, db_user = $4, db_pass = $5, 
+                email = $6, license_end = $7, admin_user = $8, admin_pass = $9, 
+                processes = $10, is_active = $11, upd_dt = CURRENT_TIMESTAMP 
+             WHERE tenant_id = $12`,
+            [name, host, db, dbUser, dbPass, email, licenseEnd, adminUser, adminPass, processes, isActive, req.params.id]
+        );
+        // Redis cache temizliği
+        if (redis) await redis.del(`tenant:${req.params.id}`);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Firma güncelleme hatası:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Şirketi Sil
+app.delete('/api/admin/tenants/:id', async (req, res) => {
+    try {
+        // Önce kullanıcıları silmek gerekebilir (Eğer ON DELETE CASCADE yoksa)
+        await pgPool.query('DELETE FROM system_users WHERE tenant_id = $1', [req.params.id]);
+        await pgPool.query('DELETE FROM system_tenants WHERE tenant_id = $1', [req.params.id]);
+        if (redis) await redis.del(`tenant:${req.params.id}`);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Firma silme hatası:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Personeli Sil
+app.delete('/api/admin/users/:id', async (req, res) => {
+    try {
+        await pgPool.query('DELETE FROM system_users WHERE user_id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Kullanıcı silme hatası:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Firma Lokasyonlarını Getir
 app.get('/api/locations', async (req, res) => {
     const authHeader = req.headers.authorization;
@@ -259,7 +334,7 @@ app.get('/api/production/mrp', async (req, res) => {
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
         const pool = await getTenantPool(decoded.tenantId);
-        
+
         const mpsSql = `
             DECLARE @Loc nvarchar(20) = @location;
             WITH PurchaseTermins AS (
