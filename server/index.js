@@ -19,9 +19,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-const port = parseInt(process.env.PORT, 10) || 5000;
 console.log('--- MPS Server Başlatılıyor ---');
-console.log('Dinlenen Port:', port);
 console.log('DATABASE_URL Mevcut mu?:', !!(process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL));
 console.log('REDIS_URL Mevcut mu?:', !!process.env.REDIS_URL);
 
@@ -232,5 +230,8 @@ app.get('*all', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`MPS Server running on port ${PORT}`));
+const PORT = parseInt(process.env.PORT, 10) || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`MPS Server is LIVE on port ${PORT}`);
+    console.log('Listening on 0.0.0.0 (Cloud compatible)');
+});
