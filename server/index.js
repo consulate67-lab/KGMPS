@@ -168,6 +168,21 @@ app.get('/api/admin/tenants', async (req, res) => {
     }
 });
 
+// Yeni Şirket Ekle (Admin Yetkisi)
+app.post('/api/admin/tenants', async (req, res) => {
+    const { name, host, db, dbUser, dbPass, email, licenseEnd } = req.body;
+    try {
+        const result = await pgPool.query(
+            'INSERT INTO system_tenants (firma_adi, db_host, db_name, db_user, db_pass, license_end) VALUES ($1, $2, $3, $4, $5, $6) RETURNING tenant_id',
+            [name, host, db, dbUser || 'sa', dbPass, licenseEnd]
+        );
+        res.json({ success: true, tenantId: result.rows[0].tenant_id });
+    } catch (err) {
+        console.error('Firma ekleme hatası:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Şirket Personellerini Getir
 app.get('/api/admin/tenants/:id/users', async (req, res) => {
     try {

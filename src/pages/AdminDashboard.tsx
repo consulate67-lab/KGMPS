@@ -40,9 +40,28 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
   // Yeni kullanıcı form state'leri
+  const [showAddTenantModal, setShowAddTenantModal] = useState(false);
+  const [newTenant, setNewTenant] = useState({
+    name: '', host: '', db: '', dbUser: 'sa', dbPass: '', email: '', licenseEnd: '2026-12-31'
+  });
+
+  // Yeni kullanıcı form state'leri
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
+
+  const handleAddTenant = async () => {
+    try {
+      const res = await axios.post(`${apiBase}/api/admin/tenants`, newTenant);
+      if (res.data.success) {
+        setShowAddTenantModal(false);
+        fetchTenants(); // Listeyi yenile
+        alert('Yeni firma başarıyla eklendi.');
+      }
+    } catch (err) {
+      alert('Firma eklenirken hata: ' + err.message);
+    }
+  };
 
   const apiBase = 'https://kgmps-production.up.railway.app';
 
@@ -194,7 +213,11 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                 onChange={(e) => setSearchTerm(e.target.value)} 
               />
             </div>
-            <button className="glass-button" style={{ background: 'linear-gradient(135deg, #4facfe, #00f2fe)', gap: '8px', display: 'flex' }}>
+            <button 
+              onClick={() => setShowAddTenantModal(true)}
+              className="glass-button" 
+              style={{ background: 'linear-gradient(135deg, #4facfe, #00f2fe)', gap: '8px', display: 'flex' }}
+            >
               <Plus size={18} /> Yeni Kayıt
             </button>
           </div>
@@ -370,6 +393,35 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
         </div>
       )}
 
+      {showAddTenantModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div className="glass-card" style={{ width: '500px', padding: '35px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px', borderBottom: '1px solid #334155', paddingBottom: '15px' }}>
+              <h3 style={{ margin: 0, color: '#00f2fe' }}>Yeni Firma Kaydı</h3>
+              <button onClick={() => setShowAddTenantModal(false)} className="glass-button" style={{ padding: '5px' }}><X size={20} /></button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div><label className="input-label">FİRMA ÜNVANI</label><input className="glass-input" placeholder="Örn: Cabani Kundura" value={newTenant.name} onChange={e => setNewTenant({...newTenant, name: e.target.value})} /></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div><label className="input-label">SQL HOST (IP)</label><input className="glass-input" placeholder="192.168..." value={newTenant.host} onChange={e => setNewTenant({...newTenant, host: e.target.value})} /></div>
+                <div><label className="input-label">DB ADI</label><input className="glass-input" placeholder="Uretim" value={newTenant.db} onChange={e => setNewTenant({...newTenant, db: e.target.value})} /></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div><label className="input-label">SQL USER</label><input className="glass-input" value={newTenant.dbUser} onChange={e => setNewTenant({...newTenant, dbUser: e.target.value})} /></div>
+                <div><label className="input-label">SQL ŞİFRE</label><input className="glass-input" type="password" value={newTenant.dbPass} onChange={e => setNewTenant({...newTenant, dbPass: e.target.value})} /></div>
+              </div>
+              <div><label className="input-label">GENEL E-POSTA</label><input className="glass-input" placeholder="info@firma.com" value={newTenant.email} onChange={e => setNewTenant({...newTenant, email: e.target.value})} /></div>
+              <div><label className="input-label">LİSANS BİTİŞ</label><input className="glass-input" type="date" value={newTenant.licenseEnd} onChange={e => setNewTenant({...newTenant, licenseEnd: e.target.value})} /></div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px', marginTop: '30px' }}>
+              <button onClick={() => setShowAddTenantModal(false)} className="glass-button" style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }}>İPTAL</button>
+              <button onClick={handleAddTenant} className="glass-button" style={{ flex: 1, background: '#00f2fe', color: '#000', fontWeight: 'bold' }}>FİRMAYI KAYDET</button>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`
         .table-row-hover:hover { background: rgba(255, 255, 255, 0.04); }
         .action-btn { padding: 8px; border-radius: 10px; transition: 0.2s; }
