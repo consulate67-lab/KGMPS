@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
-  RefreshCw, Truck, Search, 
+  RefreshCw, Search, 
   LayoutGrid, Boxes, AlertCircle, Settings2, Filter, Database
 } from 'lucide-react';
 import '../styles/professional.css';
@@ -34,7 +34,6 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
   // Parametreler
   const [mrpLocation, setMrpLocation] = useState('');
   const [marketingLocation, setMarketingLocation] = useState('');
-  const [productionLocation, setProductionLocation] = useState('');
   
   const [mrpData, setMrpData] = useState<MrpItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,7 +53,6 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
       if (res.data.length > 0) {
         setMrpLocation(res.data[0].name);
         setMarketingLocation(res.data[0].name);
-        setProductionLocation(res.data[0].name);
       }
     } catch (err: any) {
       console.error("Lokasyonlar çekilemedi:", err);
@@ -140,14 +138,6 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
             <div className="param-item">
                 <label style={paramLabelStyle}><Filter size={12} style={{marginRight: '6px'}} /> Pazarlama Siparişleri</label>
                 <select className="pro-input" style={paramInputStyle} value={marketingLocation} onChange={(e) => setMarketingLocation(e.target.value)}>
-                    {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
-                </select>
-            </div>
-
-            {/* Üretim Lokasyon */}
-            <div className="param-item">
-                <label style={paramLabelStyle}><Activity size={12} style={{marginRight: '6px'}} /> Üretim & Çizelgeleme</label>
-                <select className="pro-input" style={paramInputStyle} value={productionLocation} onChange={(e) => setProductionLocation(e.target.value)}>
                     {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
                 </select>
             </div>
