@@ -17,12 +17,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const PORT = parseInt(process.env.PORT, 10) || 5000;
+
 app.use(express.json());
 app.use(cors());
 
+// Health checks
+app.get('/api/health', (req, res) => res.send('OK'));
+app.get('/health', (req, res) => res.send('OK'));
+
 console.log('--- MPS Server Başlatılıyor ---');
-console.log('DATABASE_URL Mevcut mu?:', !!(process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL));
-console.log('REDIS_URL Mevcut mu?:', !!process.env.REDIS_URL);
+console.log('PORT:', PORT);
+console.log('DB:', !!(process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL));
+console.log('REDIS:', !!process.env.REDIS_URL);
 
 // Production'da built dosyaları sunmak için
 const distPath = path.join(__dirname, '../dist');
@@ -247,7 +254,7 @@ app.get('*all', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-const PORT = parseInt(process.env.PORT, 10) || 5000;
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`MPS Server is LIVE on port ${PORT}`);
     console.log('Listening on 0.0.0.0 (Cloud compatible)');
