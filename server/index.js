@@ -208,8 +208,8 @@ app.get('/api/production/mrp', async (req, res) => {
     }
 });
 
-// React Router için tüm istekleri index.html'e yönlendir
-app.get('*', (req, res) => {
+// React Router için tüm istekleri index.html'e yönlendir (Express 5 uyumlu)
+app.get('*all', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
