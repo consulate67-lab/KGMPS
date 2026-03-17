@@ -389,9 +389,11 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 app.get('/api/locations', async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).send('Yetkisiz.');
+    let tenantId = null;
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
-        const pool = await getTenantPool(decoded.tenantId);
+        tenantId = decoded.tenantId;
+        const pool = await getTenantPool(tenantId);
         // Projenin ERP yapısına uygun olarak lokasyon tablosu si_lok olarak güncellendi
         const result = await pool.request().query('SELECT location as id, LName as name FROM location ORDER BY Location');
         res.json(result.recordset);
@@ -399,7 +401,7 @@ app.get('/api/locations', async (req, res) => {
         console.error('❌ Lokasyon listesi hatası (Detailed):', {
             message: err.message,
             stack: err.stack,
-            tenantId: decoded?.tenantId
+            tenantId: tenantId
         });
         res.status(500).json({ error: 'Lokasyonlar yüklenemedi: ' + err.message });
     }
@@ -479,4 +481,14 @@ app.use((req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`MPS Server is LIVE on port ${PORT}`);
+});
+
+// Global Hata Yakalayıcılar (Process Crash Koruması)
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Yakalanamayan Promise Hatası:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('❌ Yakalanamayan Kritik Hata:', err);
+    // Bazı durumlarda process'i kapatmak yerine hayatta tutmaya çalışalım
 });
