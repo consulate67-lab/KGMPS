@@ -22,10 +22,10 @@ interface Tenant {
   db: string;
   licenseEnd: string;
   status: 'Aktif' | 'Pasif';
-  email: string; // Firma Genel İletişim E-Posta
-  adminUser: string; // Firmanın Ana Giriş Kullanıcısı
-  adminPass: string; // Firmanın Ana Giriş Şifresi
-  processes: string[]; // Planlamada görülecek süreçler: Enjeksiyon, Montaj, Boya vb.
+  email: string;
+  adminUser: string;
+  adminPass: string;
+  processes: string[];
   users: TenantUser[];
 }
 
@@ -39,33 +39,17 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
-  // Yeni kullanıcı form state'leri
   const [showAddTenantModal, setShowAddTenantModal] = useState(false);
   const [newTenant, setNewTenant] = useState({
     name: '', host: '', db: '', dbUser: 'sa', dbPass: '', email: '', licenseEnd: '2026-12-31'
   });
 
-  // Yeni kullanıcı form state'leri
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
 
-  const handleAddTenant = async () => {
-    try {
-      const res = await axios.post(`${apiBase}/api/admin/tenants`, newTenant);
-      if (res.data.success) {
-        setShowAddTenantModal(false);
-        fetchTenants(); // Listeyi yenile
-        alert('Yeni firma başarıyla eklendi.');
-      }
-    } catch (err) {
-      alert('Firma eklenirken hata: ' + err.message);
-    }
-  };
-
   const apiBase = 'https://kgmps-production.up.railway.app';
 
-  // Verileri Backend'den Çek
   const fetchTenants = async () => {
     try {
       const res = await axios.get(`${apiBase}/api/admin/tenants`);
@@ -81,7 +65,6 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
       if (selectedTenant && selectedTenant.id === tenantId) {
         setSelectedTenant({ ...selectedTenant, users: res.data });
       }
-      // Ayrıca ana listedeki tenant'ı güncelle
       setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, users: res.data } : t));
     } catch (err) {
       console.error('Personeller yüklenemedi:', err);
@@ -91,6 +74,20 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
   useEffect(() => {
     fetchTenants();
   }, []);
+
+  const handleAddTenant = async () => {
+    try {
+      const res = await axios.post(`${apiBase}/api/admin/tenants`, newTenant);
+      if (res.data.success) {
+        setShowAddTenantModal(false);
+        fetchTenants();
+        setNewTenant({ name: '', host: '', db: '', dbUser: 'sa', dbPass: '', email: '', licenseEnd: '2026-12-31' });
+        alert('Yeni firma başarıyla eklendi.');
+      }
+    } catch (err: any) {
+      alert('Firma eklenirken hata: ' + (err.response?.data?.error || err.message));
+    }
+  };
 
   const handleUpdateTenant = () => {
     if (editingTenant) {
@@ -112,7 +109,6 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
       }
       return t;
     }));
-    // Also update selectedTenant for the modal
     if (selectedTenant) {
        setSelectedTenant({ ...selectedTenant, users: selectedTenant.users.filter(u => u.id !== userId) });
     }
@@ -125,7 +121,6 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
     }
 
     try {
-      const apiBase = 'https://kgmps-production.up.railway.app';
       const res = await axios.post(`${apiBase}/api/admin/users`, {
         username: newUserName,
         password: newUserPass,
@@ -141,14 +136,13 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
           role: 'Planlamaci'
         };
 
-        const updatedTenants = tenants.map(t => {
+        setTenants(prev => prev.map(t => {
           if (t.id === selectedTenant.id) {
             return { ...t, users: [...t.users, newUser] };
           }
           return t;
-        });
+        }));
 
-        setTenants(updatedTenants);
         setSelectedTenant({
           ...selectedTenant,
           users: [...selectedTenant.users, newUser]
@@ -169,15 +163,18 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
     const total = tenants.length;
     const active = tenants.filter(t => t.status === 'Aktif').length;
     const expiringSoon = tenants.filter(t => {
-      const daysLeft = differenceInDays(parseISO(t.licenseEnd), new Date());
-      return daysLeft >= 0 && daysLeft <= 10;
+      if (!t.licenseEnd) return false;
+      try {
+        const daysLeft = differenceInDays(parseISO(t.licenseEnd), new Date());
+        return daysLeft >= 0 && daysLeft <= 10;
+      } catch { return false; }
     }).length;
     return { total, active, expiringSoon };
   }, [tenants]);
 
   const filteredTenants = tenants.filter(t => 
-    t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.db.toLowerCase().includes(searchTerm.toLowerCase())
+    (t.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (t.db?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
   const availableProcesses = ['Enjeksiyon', 'Montaj', 'Boya', 'Kalıphane', 'Paketleme', 'Hava Basma'];
@@ -231,8 +228,7 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
               </tr>
             </thead>
             <tbody>
-              {filteredTenants.map(t => {
-                return (
+              {filteredTenants.map(t => (
                   <tr key={t.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '14px' }} className="table-row-hover">
                     <td style={{ padding: '18px 15px', color: '#fff', fontWeight: '600' }}>
                       {t.name}
@@ -259,8 +255,7 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                       </div>
                     </td>
                   </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
         </div>
@@ -317,7 +312,7 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedTenant.users.map(u => (
+                  {(selectedTenant.users || []).map(u => (
                     <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '13px' }}>
                       <td style={{ padding: '12px', color: '#fff' }}>{u.username}</td>
                       <td style={{ color: '#94a3b8' }}>{u.email}</td>
@@ -337,7 +332,6 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
              <h3 style={{ margin: '0 0 25px 0', borderBottom: '1px solid #334155', paddingBottom: '15px', color: '#00f2fe' }}>Firma Gelişmiş Parametreleri</h3>
              
              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
-                {/* Sol Sütun: Temel ve SQL Bilgileri */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                    <div style={{ background: 'rgba(0, 242, 254, 0.03)', padding: '15px', borderRadius: '12px', borderLeft: '3px solid #00f2fe' }}>
                      <h4 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#64748b' }}>TEMEL BİLGİLER</h4>
@@ -359,7 +353,6 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                    </div>
                 </div>
 
-                {/* Sağ Sütun: Giriş Bilgileri ve Süreç Seçimi */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                    <div style={{ background: 'rgba(240, 147, 251, 0.03)', padding: '15px', borderRadius: '12px', borderLeft: '3px solid #f093fb' }}>
                       <h4 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#64748b' }}>FİRMA GİRİŞ BİLGİLERİ</h4>
@@ -422,6 +415,7 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
           </div>
         </div>
       )}
+
       <style>{`
         .table-row-hover:hover { background: rgba(255, 255, 255, 0.04); }
         .action-btn { padding: 8px; border-radius: 10px; transition: 0.2s; }
