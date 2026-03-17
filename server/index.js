@@ -84,6 +84,9 @@ async function getTenantPool(tenantID) {
     return newPool;
 }
 
+// Health Check
+app.get('/api/health', (req, res) => res.send('OK - Deployment Active: ' + new Date().toISOString()));
+
 // Routes
 app.post('/api/auth/login', async (req, res) => {
     const { username, password, tenantID } = req.body;
