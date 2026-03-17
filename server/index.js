@@ -231,8 +231,9 @@ app.get('/api/production/mrp', async (req, res) => {
     }
 });
 
-// React SPA Catch-all (Express 5 uyumlu)
-app.get('/:splat*', (req, res) => {
+// React SPA Catch-all (Express 5 ve Bulut Uyumlu En Güvenli Yöntem)
+// Hiçbir rotaya uymayan tüm istekleri index.html'e yönlendirir.
+app.use((req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
