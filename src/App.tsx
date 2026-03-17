@@ -3,8 +3,9 @@ import AdminDashboard from './pages/AdminDashboard';
 import MpsPlanner from './pages/MpsPlanner';
 import AdminLogin from './pages/AdminLogin';
 import ClientLogin from './pages/ClientLogin';
+import MaterialAnalysis from './pages/MaterialAnalysis';
 
-type ViewState = 'CLIENT_LOGIN' | 'ADMIN_LOGIN' | 'DASHBOARD' | 'PLANNER';
+type ViewState = 'CLIENT_LOGIN' | 'ADMIN_LOGIN' | 'DASHBOARD' | 'PLANNER' | 'ANALYSIS';
 
 function App() {
   const [view, setView] = useState<ViewState>('CLIENT_LOGIN');
@@ -18,7 +19,7 @@ function App() {
           onLogin={(id) => { 
             setTargetTenantId(id); 
             setIsAdminSession(false);
-            setView('PLANNER'); 
+            setView('ANALYSIS'); 
           }} 
           onAdminSwitch={() => setView('ADMIN_LOGIN')} 
         />
@@ -34,12 +35,12 @@ function App() {
       {view === 'DASHBOARD' && (
         <AdminDashboard onOpenPlanner={(id) => { 
           setTargetTenantId(id); 
-          setView('PLANNER'); 
+          setView('ANALYSIS'); 
         }} />
       )}
-      
-      {view === 'PLANNER' && (
-        <MpsPlanner 
+
+      {view === 'ANALYSIS' && (
+        <MaterialAnalysis 
           tenantId={targetTenantId}
           onBack={() => {
             if (isAdminSession) {
@@ -47,7 +48,15 @@ function App() {
             } else {
               setView('CLIENT_LOGIN');
             }
-          }} 
+          }}
+          onOpenPlanner={() => setView('PLANNER')}
+        />
+      )}
+      
+      {view === 'PLANNER' && (
+        <MpsPlanner 
+          tenantId={targetTenantId}
+          onBack={() => setView('ANALYSIS')} 
         />
       )}
     </>

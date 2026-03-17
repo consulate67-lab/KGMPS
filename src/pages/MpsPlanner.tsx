@@ -1,10 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import { useState, useEffect } from 'react';
 import { 
-  ArrowLeft, RefreshCw, Save, History, 
-  ChevronRight, ChevronLeft, 
-  LayoutGrid, Zap, 
-  Droplet, Hammer, Clock
+  History, Save, ArrowLeft, 
+  ChevronLeft, ChevronRight, RefreshCw,
+  LayoutGrid, Zap, Droplet, Hammer, Clock
 } from 'lucide-react';
 import '../styles/glass.css';
 
@@ -201,107 +199,19 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [scale, setScale] = useState(100);
-  const [locations, setLocations] = useState<string[]>(['CA001', 'CA002']);
-  const [selectedLocation, setSelectedLocation] = useState('CA001');
-  const [loading, setLoading] = useState(false);
 
+  // Gantt ekranı artık sadece planlama odaklı, hammadde analizi ANALYSIS ekranında.
   useEffect(() => {
-    const fetchLocations = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const apiBase = 'https://kgmps-production.up.railway.app';
-        const res = await axios.get(`${apiBase}/api/locations`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.data.length > 0) {
-           setLocations(res.data);
-           setSelectedLocation(res.data[0]);
-        }
-      } catch (err) {
-        console.error("Lokasyonlar yüklenemedi:", err);
-      }
-    };
-    if (tenantId) fetchLocations();
+    console.log(`Planner session for tenant: ${tenantId}`);
   }, [tenantId]);
-
-  const fetchMRP = useCallback(async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const apiBase = 'https://kgmps-production.up.railway.app';
-      const res = await axios.get(`${apiBase}/api/production/mrp`, {
-        params: {
-          location: selectedLocation,
-          startDate: '2026-03-17',
-          endDate: '2026-03-31'
-        },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      interface MrpResponseItem {
-        SipNo: string;
-        SipHarinx: number;
-        UrunAd: string;
-        HamKod: string;
-        HamAd: string;
-        GerekenMik: number;
-        HamStok: number;
-        TedarikTarihi: string;
-        YoldakiMik: number;
-      }
-
-      const mappedOrders: ProductionOrder[] = (res.data as MrpResponseItem[]).reduce((acc: ProductionOrder[], item: MrpResponseItem) => {
-        let order = acc.find(o => o.workOrderNo === item.SipNo);
-        if (!order) {
-          order = {
-            id: item.SipHarinx.toString(),
-            workOrderNo: item.SipNo,
-            productName: item.UrunAd,
-            machineId: 'M1',
-            startTime: '2026-03-17T08:00:00',
-            endTime: '2026-03-17T12:00:00',
-            cavityCount: 4,
-            cycleTime: 45,
-            setupTime: 30,
-            orderQty: 1000,
-            progress: 0,
-            color: '#4facfe',
-            materials: []
-          };
-          acc.push(order);
-        }
-        order.materials.push({
-          id: item.HamKod,
-          name: item.HamAd,
-          required: item.GerekenMik,
-          stock: item.HamStok,
-          procurementDate: item.TedarikTarihi ? new Date(item.TedarikTarihi).toLocaleDateString() : undefined,
-          incomingQty: item.YoldakiMik
-        });
-        return acc;
-      }, []);
-
-      if (mappedOrders.length > 0) setOrders(mappedOrders);
-    } catch (err) {
-      console.error("MRP verisi yüklenemedi:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedLocation]);
 
   const calculateAndUpdateDuration = (order: ProductionOrder, updates: Partial<ProductionOrder>) => {
     const updated = { ...order, ...updates };
-    // Miktar / Göz Sayısı = Çevrim Sayısı
-    // Çevrim Sayısı * Çevrim Süresi (sn) / 60 = Üretim Süresi (dk)
-    // Üretim Süresi + Hazırlık Süresi (dk) = Toplam Süre
     const productionMinutes = (updated.orderQty / Math.max(1, updated.cavityCount)) * (updated.cycleTime / 60);
     const totalMinutes = updated.setupTime + productionMinutes;
-    
     const start = new Date(updated.startTime);
     const end = new Date(start.getTime() + totalMinutes * 60000);
-    
     const finalOrder = { ...updated, endTime: end.toISOString() };
-    
     setOrders(prev => prev.map(o => o.id === order.id ? finalOrder : o));
     setSelectedOrder(finalOrder);
   };
@@ -309,21 +219,15 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
   const handleOrderMove = (orderId: string, machineId: string, newStartTime: Date) => {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
-
-    // Süreyi koru, sadece başlangıcı değiştir (endTime otomatik hesaplanır)
     const durationMs = new Date(order.endTime).getTime() - new Date(order.startTime).getTime();
     const newEndTime = new Date(newStartTime.getTime() + durationMs);
-
     const updatedOrder = {
       ...order,
       machineId,
       startTime: newStartTime.toISOString(),
       endTime: newEndTime.toISOString()
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-    
-    // Log ekle
     const newLog: RevisionLog = {
       id: Date.now(),
       userName: 'selimkorgun',
@@ -331,13 +235,8 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       details: `${order.workOrderNo} planı taşındı (${machineId}).`
     };
-    // Normal şartlarda bu bir state'e eklenir, log dizisine push ediyoruz simülasyon için
     REVISION_HISTORY.unshift(newLog);
   };
-
-  useEffect(() => {
-    if (tenantId && selectedLocation) fetchMRP();
-  }, [tenantId, selectedLocation, fetchMRP]);
 
   const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
 
@@ -347,21 +246,10 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <button onClick={onBack} className="glass-button" style={{ padding: '8px' }}><ArrowLeft size={18} /></button>
           <div>
-             <h2 className="neon-text" style={{ fontSize: '18px', margin: 0 }}>Gantt Planlama Pro / Cabani Kundura</h2>
+             <h2 className="neon-text" style={{ fontSize: '18px', margin: 0 }}>Üretim Çizelgeleme Pro</h2>
              <div style={{ fontSize: '10px', color: '#64748b', display: 'flex', gap: '15px', alignItems: 'center' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <LayoutGrid size={12} />
-                  Lokasyon: 
-                  <select 
-                    value={selectedLocation} 
-                    onChange={(e) => setSelectedLocation(e.target.value)}
-                    style={{ background: 'transparent', border: 'none', color: '#00f2fe', fontSize: '10px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}
-                  >
-                    {locations.map(loc => <option key={loc} value={loc} style={{ background: '#0f172a' }}>{loc}</option>)}
-                  </select>
-                </span>
+                <span style={{ color: '#10b981' }}>● Canlı Planlama Modu</span>
                 <span>Vardiya: Gündüz (08:00 - 20:00)</span>
-                <span style={{ color: '#10b981' }}>● Bağlantı: AKTİF</span>
              </div>
           </div>
         </div>
@@ -371,19 +259,13 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
               <span style={{ padding: '0 8px', fontSize: '11px', color: '#94a3b8', alignSelf: 'center' }}>% {scale}</span>
               <button onClick={() => setScale(s => Math.min(150, s+10))} className="glass-button" style={{ padding: '4px', background: 'transparent', boxShadow: 'none' }}><ChevronRight size={14}/></button>
            </div>
-           <button className="glass-button" style={{ background: 'rgba(79, 172, 254, 0.15)', gap: '8px', display: 'flex' }}><RefreshCw size={16} /> ÇİZELGELE</button>
+           <button className="glass-button" style={{ background: 'rgba(79, 172, 254, 0.15)', gap: '8px', display: 'flex' }}><RefreshCw size={16} /> OTOMATIK ÇİZELGELE</button>
            <button onClick={() => setShowHistory(!showHistory)} className="glass-button" style={{ background: showHistory ? 'rgba(240, 147, 251, 0.2)' : 'rgba(255,255,255,0.05)', gap: '8px', display: 'flex' }}><History size={16} /> LOG</button>
            <button className="glass-button" style={{ background: 'linear-gradient(135deg, #059669, #10b981)', gap: '8px', display: 'flex' }}><Save size={16} /> KAYDET</button>
         </div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', padding: '0 15px 15px 15px', position: 'relative' }}>
-        {loading && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '15px' }}>
-            <RefreshCw className="animate-spin" size={40} color="#00f2fe" />
-            <div style={{ fontSize: '14px', color: '#94a3b8' }}>Veriler Güncelleniyor...</div>
-          </div>
-        )}
         <div className="glass-card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
             <div style={{ minWidth: `${180 + (hours.length * 100)}px` }}>
