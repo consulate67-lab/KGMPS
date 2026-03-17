@@ -21,17 +21,24 @@ const PORT = parseInt(process.env.PORT, 10) || 5000;
 
 // 1. CORS Middleware (EN ÜSTTE OLMALI - Preflight / OPTIONS talepleri için)
 app.use(cors({
-    origin: '*', // Veya spesifik olarak: 'https://consulate67-lab.github.io'
+    origin: '*', 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true
 }));
-app.options('*', cors()); // Tüm OPTIONS taleplerine yanıt ver
+app.options('*', cors()); 
 
-// 2. Body Parser
+// 2. Request Logging (Hata Ayıklama İçin)
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
+// 3. Body Parser
 app.use(express.json());
 
-// 3. Health check (CORS sonrası)
+// 4. Health & Root (CORS sonrası)
+app.get('/', (req, res) => res.send('MPS API Server is Running...'));
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
 
