@@ -22,9 +22,7 @@ const PORT = parseInt(process.env.PORT, 10) || 5000;
 app.use(express.json());
 app.use(cors());
 
-// Health checks
-app.get('/api/health', (req, res) => res.send('OK'));
-app.get('/health', (req, res) => res.send('OK'));
+
 
 console.log('--- MPS Server Başlatılıyor ---');
 console.log('PORT:', PORT);
@@ -54,9 +52,7 @@ const pgPool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-app.get('/', (req, res) => {
-    res.send('<h1>MPS API is Online</h1><p>Visit /api/health to check services.</p>');
-});
+
 
 pgPool.on('error', (err) => {
     console.error('PostgreSQL Beklenmedik Hata:', err);
@@ -122,14 +118,12 @@ async function getTenantPool(tenantID) {
     return newPool;
 }
 
-// Health Check
-app.get('/api/health', (req, res) => res.send('OK - Deployment Active: ' + new Date().toISOString()));
+// --- Routes ---
 
-// Routes
+// Login
 app.post('/api/auth/login', async (req, res) => {
     const { username, password, tenantID } = req.body;
     try {
-        // PostgreSQL üzerinden kullanıcı doğrula
         const result = await pgPool.query(
             'SELECT user_id, password, role FROM system_users WHERE username = $1 AND tenant_id = $2 AND is_active = true',
             [username, tenantID]
@@ -140,7 +134,6 @@ app.post('/api/auth/login', async (req, res) => {
         }
         
         const user = result.rows[0];
-        // TODO: bcrypt.compare kullanılmalı
         if (password !== user.password) {
             return res.status(401).json({ error: 'Hatalı şifre.' });
         }
@@ -165,9 +158,6 @@ app.get('/api/locations', async (req, res) => {
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
         const pool = await getTenantPool(decoded.tenantId);
-        
-        // Genellikle Korgün'de lokasyonlar bu tablo veya cari_kart içinde tutulur
-        // Burada basitçe hareket görmüş lokasyonları getirelim
         const result = await pool.request().query('SELECT DISTINCT Location FROM si_gchar WHERE Location <> \'\' ORDER BY Location');
         res.json(result.recordset.map(r => r.Location));
     } catch (err) {
@@ -186,13 +176,8 @@ app.get('/api/production/mrp', async (req, res) => {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
         const pool = await getTenantPool(decoded.tenantId);
         
-        // Kullanıcı talebine göre: 
-        // 1. Sipariş tarihi filtresi kaldırıldı.
-        // 2. Lokasyon; sipariş, stok mevcudu ve satınalma terminleri için ortak kriter yapıldı.
         const mpsSql = `
             DECLARE @Loc nvarchar(20) = @location;
-
-            -- 1. Lokasyon Bazlı Satınalma Terminleri (Hammaddeler için)
             WITH PurchaseTermins AS (
                 SELECT 
                     sh.SKod, sh.RKod, sh.BedKod,
@@ -200,13 +185,12 @@ app.get('/api/production/mrp', async (req, res) => {
                     SUM(isNull(sh.Miktar,0) - isNull(sh.TeslimMiktar,0)) as BekleyenMik
                 FROM siparis_kay sk
                 JOIN siparis_har sh ON sk.SipNo = sh.SipNo
-                WHERE sk.SipTip = 'A' -- Alınan (Satınalma) Sipariş
-                  AND sk.Location = @Loc -- Sadece seçili lokasyona gelecek olanlar
+                WHERE sk.SipTip = 'A' 
+                  AND sk.Location = @Loc
                   AND (sh.Durum = '' OR sh.Durum IS NULL)
                   AND (sh.Miktar > isNull(sh.TeslimMiktar,0))
                 GROUP BY sh.SKod, sh.RKod, sh.BedKod
             ),
-            -- 2. Lokasyon Bazlı Anlık Hammadde Stoğu
             CurrentStock AS (
                 SELECT 
                     SKod, RKod, BedKod,
@@ -215,7 +199,6 @@ app.get('/api/production/mrp', async (req, res) => {
                 WHERE Location = @Loc
                 GROUP BY SKod, RKod, BedKod
             )
-            -- 3. Ana Liste (Siparişler + Gereken Hammaddeler + Durum)
             SELECT 
                 sk.SipNo, sh.SipHarinx, sk.CariKod, cr.CName as Musteri,
                 sh.SKod as UrunKod, st1.Tanim as UrunAd,
@@ -226,14 +209,13 @@ app.get('/api/production/mrp', async (req, res) => {
                 pt.BekleyenMik as YoldakiMik
             FROM siparis_kay sk
             JOIN siparis_har sh ON sk.SipNo = sh.SipNo
-            -- Reçete (BOM) bağlantısı - model_PD üzerinden
             JOIN model_PD pd ON sh.SKod = pd.ModelKod 
             LEFT JOIN StokKart st1 ON sh.SKod = st1.SKod
             LEFT JOIN StokKart st2 ON pd.SKod = st2.SKod
             LEFT JOIN Cari_Kart cr ON sk.CariKod = cr.CKod
             LEFT JOIN PurchaseTermins pt ON pd.SKod = pt.SKod
             LEFT JOIN CurrentStock cs ON pd.SKod = cs.SKod
-            WHERE sk.SipTip = 'S' -- Satış Siparişleri (Planlanacak olanlar)
+            WHERE sk.SipTip = 'S' 
               AND sk.Location = @Loc
               AND (sh.Durum = '' OR sh.Durum IS NULL)
               AND (sh.Miktar > isNull(sh.SevkMiktar,0))
@@ -249,13 +231,11 @@ app.get('/api/production/mrp', async (req, res) => {
     }
 });
 
-// React Router için tüm istekleri index.html'e yönlendir (Express 5 uyumlu)
-app.get('*all', (req, res) => {
+// React SPA Catch-all (Express 5 uyumlu)
+app.get('/:splat*', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`MPS Server is LIVE on port ${PORT}`);
-    console.log('Listening on 0.0.0.0 (Cloud compatible)');
 });
