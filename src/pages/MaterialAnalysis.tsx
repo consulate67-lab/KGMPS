@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
   RefreshCw, Truck, Search, 
-  LayoutGrid, Boxes, AlertCircle, CheckCircle2
+  LayoutGrid, Boxes, AlertCircle
 } from 'lucide-react';
 import '../styles/professional.css';
 
@@ -22,7 +22,7 @@ interface MaterialAnalysisProps {
   tenantId: number | null;
 }
 
-const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId }) => {
+const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId }) => {
   const [loading, setLoading] = useState(false);
   const [locations, setLocations] = useState<string[]>([]);
   const [selectedLocation, setSelectedLocation] = useState('');
