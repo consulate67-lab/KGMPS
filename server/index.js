@@ -388,6 +388,7 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 // Şirket Lokasyonlarını Getir (Parametre Havuzu)
 app.get('/api/locations', async (req, res) => {
     const authHeader = req.headers.authorization;
+    console.log(`[DEBUG] /api/locations Header:`, authHeader ? 'Mevcut' : 'EKSİK');
     if (!authHeader) return res.status(401).send('Yetkisiz.');
     let tenantId = null;
     try {

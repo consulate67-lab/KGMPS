@@ -49,22 +49,33 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
 
   const fetchLocations = async () => {
     const url = `${apiBase}/api/locations`;
-    console.log(`[DEBUG] Lokasyonlar çekiliyor: ${url}`);
+    const token = localStorage.getItem('token');
     
+    console.log(`[DEBUG] İstek gönderiliyor: ${url}`);
+    console.log(`[DEBUG] Token durumu: ${token ? 'Mevcut (Giriş yapılmış)' : 'YOK (Giriş yapılmamış!)'}`);
+    
+    if (!token) {
+      setError("Oturumunuz sona ermiş. Lütfen tekrar giriş yapın (401 - Token Missing).");
+      return;
+    }
+
     try {
-      const token = localStorage.getItem('token');
       const res = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
       });
-      console.log(`[DEBUG] Lokasyonlar yüklendi:`, res.data);
+      console.log(`[DEBUG] Başarılı! Lokasyonlar:`, res.data);
       setLocations(res.data);
       if (res.data.length > 0) {
         setMrpLocation(res.data[0].name);
         setMarketingLocation(res.data[0].name);
       }
     } catch (err: any) {
-      console.error(`[DEBUG] Lokasyon çekme HATASI:`, err);
-      setError(`Bağlantı Sorunu (URL: ${url}): ${err.message}`);
+      console.error(`[DEBUG] İstek HATASI:`, err.response || err);
+      const hostMsg = window.location.hostname.includes('github.io') ? " (GitHub Pages -> Railway)" : "";
+      setError(`Erişim Sorunu: ${err.response?.status === 401 ? 'Giriş Yetkisi Hatası (401)' : err.message}${hostMsg}`);
     }
   };
 
