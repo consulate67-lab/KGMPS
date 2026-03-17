@@ -21,12 +21,12 @@ const PORT = parseInt(process.env.PORT, 10) || 5000;
 
 // 1. CORS Middleware (EN ÜSTTE OLMALI - Preflight / OPTIONS talepleri için)
 app.use(cors({
-    origin: '*', 
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true
 }));
-app.options('*', cors()); 
+app.options('*', cors());
 
 // 2. Request Logging (Hata Ayıklama İçin)
 app.use((req, res, next) => {
@@ -81,7 +81,7 @@ pgPool.on('error', (err) => {
 async function runMigrations() {
     try {
         console.log('Veritabanı kontrol süreci başlatıldı...');
-        
+
         // 1. Tabloları Oluştur
         const setupQueries = [
             `CREATE TABLE IF NOT EXISTS system_tenants (
@@ -107,7 +107,7 @@ async function runMigrations() {
             )`
         ];
 
-        for(let sql of setupQueries) {
+        for (let sql of setupQueries) {
             await pgPool.query(sql);
         }
 
@@ -118,8 +118,8 @@ async function runMigrations() {
             'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS admin_pass VARCHAR(255)',
             'ALTER TABLE system_tenants ADD COLUMN IF NOT EXISTS processes TEXT[]'
         ];
-        
-        for(let sql of columnMigrations) {
+
+        for (let sql of columnMigrations) {
             await pgPool.query(sql);
         }
 
@@ -257,7 +257,7 @@ app.post('/api/admin/tenants', async (req, res) => {
     const { name, host, db, dbUser, dbPass, email, licenseEnd } = req.body;
     try {
         console.log('Firma ekleme isteği:', { name, host, db, email });
-        
+
         if (!name || !host || !db) {
             return res.status(400).json({ error: 'Firma adı, host ve veritabanı adı zorunludur.' });
         }
@@ -355,7 +355,7 @@ app.get('/api/locations', async (req, res) => {
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
         // Projenin ERP yapısına uygun olarak lokasyon tablosu si_lok olarak güncellendi
-        const result = await pool.request().query('SELECT LocationID as id, Location as name FROM si_lok ORDER BY Location');
+        const result = await pool.request().query('SELECT location  as id, LName as name FROM location ORDER BY Location');
         res.json(result.recordset);
     } catch (err) {
         console.error('❌ Lokasyon listesi hatası (Detailed):', {
