@@ -150,6 +150,21 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// Personel Ekle (Admin Yetkisi)
+app.post('/api/admin/users', async (req, res) => {
+    const { username, password, tenantId, role } = req.body;
+    try {
+        const result = await pgPool.query(
+            'INSERT INTO system_users (tenant_id, username, password, role) VALUES ($1, $2, $3, $4) RETURNING user_id',
+            [tenantId, username, password, role || 'Planlamaci']
+        );
+        res.json({ success: true, userId: result.rows[0].user_id });
+    } catch (err) {
+        console.error('Kullanıcı ekleme hatası:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Firma Lokasyonlarını Getir
 app.get('/api/locations', async (req, res) => {
     const authHeader = req.headers.authorization;

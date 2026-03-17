@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import axios from 'axios';
 import { 
   Users, Building2, ShieldAlert, CheckCircle2, 
   Search, Plus, Edit2, Trash2, 
@@ -66,6 +67,11 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  
+  // Yeni kullanıcı form state'leri
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPass, setNewUserPass] = useState('');
 
   const handleUpdateTenant = () => {
     if (editingTenant) {
@@ -90,6 +96,53 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
     // Also update selectedTenant for the modal
     if (selectedTenant) {
        setSelectedTenant({ ...selectedTenant, users: selectedTenant.users.filter(u => u.id !== userId) });
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUserName.trim() || !newUserPass.trim() || !selectedTenant) {
+      alert('Lütfen kullanıcı adı ve şifre giriniz.');
+      return;
+    }
+
+    try {
+      const apiBase = 'https://kgmps-production.up.railway.app';
+      const res = await axios.post(`${apiBase}/api/admin/users`, {
+        username: newUserName,
+        password: newUserPass,
+        tenantId: selectedTenant.id,
+        role: 'Planlamaci'
+      });
+
+      if (res.data.success) {
+        const newUser: TenantUser = {
+          id: res.data.userId,
+          username: newUserName,
+          email: newUserEmail,
+          role: 'Planlamaci'
+        };
+
+        const updatedTenants = tenants.map(t => {
+          if (t.id === selectedTenant.id) {
+            return { ...t, users: [...t.users, newUser] };
+          }
+          return t;
+        });
+
+        setTenants(updatedTenants);
+        setSelectedTenant({
+          ...selectedTenant,
+          users: [...selectedTenant.users, newUser]
+        });
+
+        setNewUserName('');
+        setNewUserEmail('');
+        setNewUserPass('');
+        alert('Personel başarıyla eklendi.');
+      }
+    } catch (err: any) {
+      console.error('Hata:', err);
+      alert('Kullanıcı eklenirken bir hata oluştu: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -198,11 +251,36 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
             </div>
             <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '15px', padding: '20px', marginBottom: '25px' }}>
                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                 <input className="glass-input" placeholder="Kullanıcı Adı" style={{ marginBottom: 0 }} />
-                 <input className="glass-input" placeholder="E-Posta Adresi" style={{ marginBottom: 0 }} />
-                 <input className="glass-input" type="password" placeholder="Şifre" style={{ marginBottom: 0 }} />
+                 <input 
+                   className="glass-input" 
+                   placeholder="Kullanıcı Adı" 
+                   style={{ marginBottom: 0 }} 
+                   value={newUserName}
+                   onChange={(e) => setNewUserName(e.target.value)}
+                 />
+                 <input 
+                   className="glass-input" 
+                   placeholder="E-Posta Adresi" 
+                   style={{ marginBottom: 0 }} 
+                   value={newUserEmail}
+                   onChange={(e) => setNewUserEmail(e.target.value)}
+                 />
+                 <input 
+                   className="glass-input" 
+                   type="password" 
+                   placeholder="Şifre" 
+                   style={{ marginBottom: 0 }} 
+                   value={newUserPass}
+                   onChange={(e) => setNewUserPass(e.target.value)}
+                 />
                </div>
-               <button className="glass-button" style={{ background: '#00f2fe', color: '#000', fontWeight: 'bold', width: '100%' }}>PERSONELİ SİSTEME EKLE</button>
+               <button 
+                 onClick={handleAddUser}
+                 className="glass-button" 
+                 style={{ background: '#00f2fe', color: '#000', fontWeight: 'bold', width: '100%' }}
+               >
+                 PERSONELİ SİSTEME EKLE
+               </button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
