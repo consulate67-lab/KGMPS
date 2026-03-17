@@ -74,8 +74,9 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
       }
     } catch (err: any) {
       console.error(`[DEBUG] İstek HATASI:`, err.response || err);
+      const serverError = err.response?.data?.error || err.message;
       const hostMsg = window.location.hostname.includes('github.io') ? " (GitHub Pages -> Railway)" : "";
-      setError(`Erişim Sorunu: ${err.response?.status === 401 ? 'Giriş Yetkisi Hatası (401)' : err.message}${hostMsg}`);
+      setError(`Sunucu Hatası: ${serverError}${hostMsg}`);
     }
   };
 
