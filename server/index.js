@@ -26,7 +26,7 @@ app.use(express.static(path.join(__dirname, '../dist')));
 
 // 1. Merkezi Veritabanı (PostgreSQL)
 const pgPool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL,
     ssl: { rejectUnauthorized: false } // Railway için gerekli
 });
 
