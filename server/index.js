@@ -425,13 +425,13 @@ app.get('/api/production/mrp', async (req, res) => {
                 SELECT 
                     sh.SKod, sh.RKod, sh.BedKod,
                     MIN(sh.TerminTarihi) as EnYakinTermin,
-                    SUM(isNull(sh.Miktar,0) - isNull(sh.TeslimMiktar,0)) as BekleyenMik
+                    SUM(isNull(sh.Miktar,0) - isNull(sh.SevkMiktar,0)) as BekleyenMik
                 FROM siparis_kay sk
                 JOIN siparis_har sh ON sk.SipNo = sh.SipNo
                 WHERE sk.SipTip = 'A' 
                   AND sk.Location = @Loc
                   AND (sh.Durum = '' OR sh.Durum IS NULL)
-                  AND (sh.Miktar > isNull(sh.TeslimMiktar,0))
+                  AND (sh.Miktar > isNull(sh.SevkMiktar,0))
                 GROUP BY sh.SKod, sh.RKod, sh.BedKod
             ),
             CurrentStock AS (
