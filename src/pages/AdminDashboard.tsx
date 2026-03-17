@@ -239,7 +239,7 @@ const AdminDashboard = ({ onOpenPlanner }: { onOpenPlanner: () => void }) => {
                     <td><span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', background: t.status === 'Aktif' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: t.status === 'Aktif' ? '#4ade80' : '#f87171' }}>{t.status}</span></td>
                     <td>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {t.processes.map(p => <span key={p} style={{ fontSize: '10px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#cbd5e1' }}>{p}</span>)}
+                        {(t.processes || []).map(p => <span key={p} style={{ fontSize: '10px', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#cbd5e1' }}>{p}</span>)}
                       </div>
                     </td>
                     <td style={{ textAlign: 'right', paddingRight: '15px' }}>
