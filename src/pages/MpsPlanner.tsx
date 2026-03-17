@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
   ArrowLeft, RefreshCw, Save, History, 
@@ -223,33 +223,45 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
     if (tenantId) fetchLocations();
   }, [tenantId]);
 
-  const fetchMRP = async () => {
+  const fetchMRP = useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get('http://localhost:5000/api/production/mrp', {
         params: {
           location: selectedLocation,
-          startDate: '2026-03-17', // Test için sabit, normalde güncel tarih
+          startDate: '2026-03-17',
           endDate: '2026-03-31'
         },
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      // Gelen veriyi ProductionOrder formatına dönüştürme (Özet)
-      const mappedOrders: ProductionOrder[] = res.data.reduce((acc: any[], item: any) => {
+      interface MrpResponseItem {
+        SipNo: string;
+        SipHarinx: number;
+        UrunAd: string;
+        HamKod: string;
+        HamAd: string;
+        GerekenMik: number;
+        HamStok: number;
+        TedarikTarihi: string;
+        YoldakiMik: number;
+      }
+
+      const mappedOrders: ProductionOrder[] = (res.data as MrpResponseItem[]).reduce((acc: ProductionOrder[], item: MrpResponseItem) => {
         let order = acc.find(o => o.workOrderNo === item.SipNo);
         if (!order) {
           order = {
             id: item.SipHarinx.toString(),
             workOrderNo: item.SipNo,
             productName: item.UrunAd,
-            machineId: 'M1', // Varsayılan, plandan gelmeli
+            machineId: 'M1',
             startTime: '2026-03-17T08:00:00',
             endTime: '2026-03-17T12:00:00',
             cavityCount: 4,
             cycleTime: 45,
             setupTime: 30,
+            orderQty: 1000,
             progress: 0,
             color: '#4facfe',
             materials: []
@@ -273,7 +285,7 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedLocation]);
 
   const calculateAndUpdateDuration = (order: ProductionOrder, updates: Partial<ProductionOrder>) => {
     const updated = { ...order, ...updates };
@@ -323,7 +335,7 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
 
   useEffect(() => {
     if (tenantId && selectedLocation) fetchMRP();
-  }, [tenantId, selectedLocation]);
+  }, [tenantId, selectedLocation, fetchMRP]);
 
   const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
 

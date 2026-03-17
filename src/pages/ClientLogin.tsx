@@ -12,7 +12,6 @@ const ClientLogin: React.FC<ClientLoginProps> = ({ onLogin, onAdminSwitch }) => 
   const [selectedTenant, setSelectedTenant] = useState<number>(1);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -24,8 +23,12 @@ const ClientLogin: React.FC<ClientLoginProps> = ({ onLogin, onAdminSwitch }) => 
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('role', res.data.role);
       onLogin(selectedTenant);
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Giriş başarısız!');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        alert(err.response?.data?.error || 'Giriş başarısız!');
+      } else {
+        alert('Beklenmedik bir hata oluştu');
+      }
     }
   };
 
