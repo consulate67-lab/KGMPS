@@ -19,6 +19,11 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+console.log('--- MPS Server Başlatılıyor ---');
+console.log('PORT:', process.env.PORT || 5000);
+console.log('DATABASE_URL Mevcut mu?:', !!(process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL));
+console.log('REDIS_URL Mevcut mu?:', !!process.env.REDIS_URL);
+
 // Production'da built dosyaları sunmak için
 app.use(express.static(path.join(__dirname, '../dist')));
 
@@ -27,11 +32,21 @@ app.use(express.static(path.join(__dirname, '../dist')));
 // 1. Merkezi Veritabanı (PostgreSQL)
 const pgPool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL,
-    ssl: { rejectUnauthorized: false } // Railway için gerekli
+    ssl: { rejectUnauthorized: false }
 });
 
-// 2. Önbellek (Redis)
-const redis = new Redis(process.env.REDIS_URL);
+pgPool.on('error', (err) => {
+    console.error('PostgreSQL Beklenmedik Hata:', err);
+});
+
+// 2. Önbellek (Redis) - URL yoksa hata vermemesi için koruma
+let redis;
+if (process.env.REDIS_URL) {
+    redis = new Redis(process.env.REDIS_URL);
+    redis.on('error', (err) => console.error('Redis Bağlantı Hatası:', err));
+} else {
+    console.warn('UYARI: REDIS_URL tanımlanmamış, cache devre dışı kalabilir.');
+}
 
 // 3. Dinamik MSSQL Connection Pool Önbelleği (Bellekte tutulmaya devam edebilir, bağlantılar hafiftir)
 const tenantPools = new Map();
