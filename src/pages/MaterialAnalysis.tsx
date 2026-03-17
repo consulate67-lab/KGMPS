@@ -151,7 +151,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId }) => {
 
           <div style={{ display: 'flex', gap: '8px' }}>
             <ViewTab active={groupBy === 'ORDER'} onClick={() => setGroupBy('ORDER')} icon={<LayoutGrid size={14} />} label="Sipariş Bazlı" />
-            <ViewTab active={groupBy === 'MATERIAL'} onClick={() => setGroupBy('MATERIAL'} icon={<Boxes size={14} />} label="Hammadde Bazlı" />
+            <ViewTab active={groupBy === 'MATERIAL'} onClick={() => setGroupBy('MATERIAL')} icon={<Boxes size={14} />} label="Hammadde Bazlı" />
           </div>
         </div>
 
