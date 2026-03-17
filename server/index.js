@@ -150,11 +150,18 @@ async function getTenantPool(tenantID) {
 
     // Redis'te tenant ayarlarını kontrol et (Sürekli PG'ye gitmemek için)
     const cacheKey = `tenant:${tenantID}`;
-    let tenantData = await redis.get(cacheKey);
+    let tenantData = null;
+    
+    if (redis) {
+        try {
+            tenantData = await redis.get(cacheKey);
+            if (tenantData) tenantData = JSON.parse(tenantData);
+        } catch (e) {
+            console.warn('Redis read error:', e.message);
+        }
+    }
 
-    if (tenantData) {
-        tenantData = JSON.parse(tenantData);
-    } else {
+    if (!tenantData) {
         // PG'den oku
         const result = await pgPool.query(
             'SELECT db_host, db_name, db_user, db_pass, license_end, is_active FROM system_tenants WHERE tenant_id = $1',
@@ -165,7 +172,13 @@ async function getTenantPool(tenantID) {
         tenantData = result.rows[0];
 
         // Redis'e yaz (1 saatlik cache)
-        await redis.set(cacheKey, JSON.stringify(tenantData), 'EX', 3600);
+        if (redis) {
+            try {
+                await redis.set(cacheKey, JSON.stringify(tenantData), 'EX', 3600);
+            } catch (e) {
+                console.warn('Redis write error:', e.message);
+            }
+        }
     }
 
     // Lisans Kontrolü

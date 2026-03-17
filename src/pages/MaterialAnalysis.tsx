@@ -48,19 +48,23 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
     : window.location.origin;
 
   const fetchLocations = async () => {
+    const url = `${apiBase}/api/locations`;
+    console.log(`[DEBUG] Lokasyonlar çekiliyor: ${url}`);
+    
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get(`${apiBase}/api/locations`, {
+      const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log(`[DEBUG] Lokasyonlar yüklendi:`, res.data);
       setLocations(res.data);
       if (res.data.length > 0) {
         setMrpLocation(res.data[0].name);
         setMarketingLocation(res.data[0].name);
       }
     } catch (err: any) {
-      console.error("Lokasyonlar çekilemedi:", err);
-      setError(`Lokasyon listesi alınamadı: ${err.message}`);
+      console.error(`[DEBUG] Lokasyon çekme HATASI:`, err);
+      setError(`Bağlantı Sorunu (URL: ${url}): ${err.message}`);
     }
   };
 
