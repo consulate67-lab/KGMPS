@@ -41,7 +41,9 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
   const [groupBy, setGroupBy] = useState<'ORDER' | 'MATERIAL'>('ORDER');
   const [error, setError] = useState<string | null>(null);
 
-  const apiBase = 'https://kgmps-production.up.railway.app';
+  const apiBase = window.location.origin === 'http://localhost:5173' 
+    ? 'https://kgmps-production.up.railway.app' 
+    : window.location.origin;
 
   const fetchLocations = async () => {
     try {
