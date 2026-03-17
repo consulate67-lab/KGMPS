@@ -348,18 +348,19 @@ app.delete('/api/admin/users/:id', async (req, res) => {
     }
 });
 
-// Firma Lokasyonlarını Getir
+// Şirket Lokasyonlarını Getir (Parametre Havuzu)
 app.get('/api/locations', async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).send('Yetkisiz.');
-
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
         const pool = await getTenantPool(decoded.tenantId);
-        const result = await pool.request().query('SELECT DISTINCT Location FROM si_gchar WHERE Location <> \'\' ORDER BY Location');
-        res.json(result.recordset.map(r => r.Location));
+        // Kullanıcının talebi üzerine doğrudan 'location' tablosundan tüm veriyi çekiyoruz
+        const result = await pool.request().query('SELECT LocationID as id, Location as name FROM location ORDER BY Location');
+        res.json(result.recordset);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Lokasyon listesi hatası:', err);
+        res.status(500).json({ error: 'Lokasyonlar yüklenemedi: ' + err.message });
     }
 });
 

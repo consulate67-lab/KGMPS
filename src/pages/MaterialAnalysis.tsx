@@ -2,9 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
   RefreshCw, Truck, Search, 
-  LayoutGrid, Boxes, AlertCircle
+  LayoutGrid, Boxes, AlertCircle, Settings2, Filter, Database
 } from 'lucide-react';
 import '../styles/professional.css';
+
+interface Location {
+  id: any;
+  name: string;
+}
 
 interface MrpItem {
   SipNo: string;
@@ -24,8 +29,13 @@ interface MaterialAnalysisProps {
 
 const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId }) => {
   const [loading, setLoading] = useState(false);
-  const [locations, setLocations] = useState<string[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState('');
+  const [locations, setLocations] = useState<Location[]>([]);
+  
+  // Parametreler
+  const [mrpLocation, setMrpLocation] = useState('');
+  const [marketingLocation, setMarketingLocation] = useState('');
+  const [productionLocation, setProductionLocation] = useState('');
+  
   const [mrpData, setMrpData] = useState<MrpItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'CRITICAL' | 'OK'>('ALL');
@@ -36,56 +46,42 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
 
   const fetchLocations = async () => {
     try {
-      setError(null);
       const token = localStorage.getItem('token');
-      console.log('Fetching locations with token:', token ? 'Exists' : 'Missing');
       const res = await axios.get(`${apiBase}/api/locations`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      console.log('Locations received:', res.data);
       setLocations(res.data);
       if (res.data.length > 0) {
-        setSelectedLocation(res.data[0]);
-      } else {
-        setError('Lokasyon bulunamadı. Lütfen veritabanınızı kontrol edin.');
+        setMrpLocation(res.data[0].name);
+        setMarketingLocation(res.data[0].name);
+        setProductionLocation(res.data[0].name);
       }
     } catch (err: any) {
       console.error("Lokasyonlar çekilemedi:", err);
-      setError(`Bağlantı hatası: ${err.response?.data?.error || err.message}`);
+      setError(`Lokasyon listesi alınamadı: ${err.message}`);
     }
   };
 
   const fetchMrpAnalysis = useCallback(async () => {
-    if (!selectedLocation) return;
+    if (!mrpLocation) return;
     setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(`${apiBase}/api/production/mrp`, {
-        params: {
-          location: selectedLocation,
-          startDate: '2026-03-01',
-          endDate: '2026-12-31'
-        },
+        params: { location: mrpLocation },
         headers: { Authorization: `Bearer ${token}` }
       });
       setMrpData(res.data);
-      console.log('MRP data received:', res.data.length, 'records');
     } catch (err: any) {
-      console.error("MRP Analizi başarısız:", err);
-      setError(`Veri çekilemedi: ${err.response?.data?.error || err.message}`);
+      setError(`MRP verisi çekilemedi: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
     }
-  }, [selectedLocation]);
+  }, [mrpLocation]);
 
-  useEffect(() => {
-    fetchLocations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedLocation) fetchMrpAnalysis();
-  }, [selectedLocation, fetchMrpAnalysis]);
+  useEffect(() => { fetchLocations(); }, []);
+  useEffect(() => { if (mrpLocation) fetchMrpAnalysis(); }, [mrpLocation, fetchMrpAnalysis]);
 
   const processedData = useMemo(() => {
     const filtered = mrpData.filter(item => {
@@ -122,177 +118,167 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden' }}>
-      {/* Search & Feedback Area */}
-      {error && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#dc2626', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px' }}>
-          <AlertCircle size={18} /> {error}
-          <button onClick={fetchLocations} className="pro-button" style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: '12px' }}>Yeniden Dene</button>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc', overflow: 'hidden' }}>
+      
+      {/* 1. PARAMETRE PANELİ (Üst Alan) */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '16px 24px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+            <Settings2 size={16} color="#475569" />
+            <span style={{ fontWeight: '700', fontSize: '13px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rapor Parametreleri / Lokasyon Seçimleri</span>
         </div>
-      )}
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+            {/* MRP Lokasyon */}
+            <div className="param-item">
+                <label style={paramLabelStyle}><Database size={12} style={{marginRight: '6px'}} /> Stok & Tedarik Lokasyonu</label>
+                <select className="pro-input" style={paramInputStyle} value={mrpLocation} onChange={(e) => setMrpLocation(e.target.value)}>
+                    {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
+                </select>
+            </div>
 
-      {/* Control Panel */}
-      <div className="pro-card" style={{ padding: '16px 24px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-          <div>
-            <label style={{ fontSize: '11px', color: '#64748b', fontWeight: '800', display: 'block', marginBottom: '4px' }}>LOKASYON / DEPO</label>
-            <select 
-              className="pro-input"
-              style={{ width: '180px', padding: '6px 12px', fontWeight: '600' }}
-              value={selectedLocation} 
-              onChange={(e) => setSelectedLocation(e.target.value)}
-            >
-              {locations.length === 0 && <option value="">Yükleniyor...</option>}
-              {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-            </select>
-          </div>
+            {/* Pazarlama Lokasyon */}
+            <div className="param-item">
+                <label style={paramLabelStyle}><Filter size={12} style={{marginRight: '6px'}} /> Pazarlama Siparişleri</label>
+                <select className="pro-input" style={paramInputStyle} value={marketingLocation} onChange={(e) => setMarketingLocation(e.target.value)}>
+                    {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
+                </select>
+            </div>
 
-          <div style={{ width: '1px', height: '32px', background: '#e2e8f0' }} />
+            {/* Üretim Lokasyon */}
+            <div className="param-item">
+                <label style={paramLabelStyle}><Activity size={12} style={{marginRight: '6px'}} /> Üretim & Çizelgeleme</label>
+                <select className="pro-input" style={paramInputStyle} value={productionLocation} onChange={(e) => setProductionLocation(e.target.value)}>
+                    {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
+                </select>
+            </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <ViewTab active={groupBy === 'ORDER'} onClick={() => setGroupBy('ORDER')} icon={<LayoutGrid size={14} />} label="Sipariş Bazlı" />
-            <ViewTab active={groupBy === 'MATERIAL'} onClick={() => setGroupBy('MATERIAL')} icon={<Boxes size={14} />} label="Hammadde Bazlı" />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <MiniStatCard label="Eksik" value={stats.criticalCount} color="#ef4444" />
-          <MiniStatCard label="Tamam" value={stats.okCount} color="#10b981" />
-          <MiniStatCard label="Açık" value={stats.totalShortage.toLocaleString()} color="#f59e0b" />
-          <button onClick={fetchMrpAnalysis} className="pro-button" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px' }}>
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Güncelle
-          </button>
+            {/* Grup Seçimi */}
+            <div className="param-item">
+                <label style={paramLabelStyle}>Görünüm Gruplama</label>
+                <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
+                    <button 
+                        onClick={() => setGroupBy('ORDER')} 
+                        style={groupBy === 'ORDER' ? activeTabStyle : inactiveTabStyle}
+                    >Sipariş</button>
+                    <button 
+                        onClick={() => setGroupBy('MATERIAL')} 
+                        style={groupBy === 'MATERIAL' ? activeTabStyle : inactiveTabStyle}
+                    >Hammadde</button>
+                </div>
+            </div>
         </div>
       </div>
 
-      {/* Grid Container */}
-      <div className="pro-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input 
-              className="pro-input" 
-              placeholder="Sipariş veya Malzeme Ara..." 
-              style={{ paddingLeft: '36px', width: '300px' }}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <FilterBtn active={filterStatus === 'ALL'} onClick={() => setFilterStatus('ALL')} label="Tümü" />
-            <FilterBtn active={filterStatus === 'CRITICAL'} onClick={() => setFilterStatus('CRITICAL')} label="Kritik Eksikler" color="#ef4444" />
-          </div>
-        </div>
+      {/* 2. RAPOR ALANI */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px', overflow: 'hidden' }}>
+        
+        {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#dc2626', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <AlertCircle size={18} /> {error}
+            </div>
+        )}
 
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {processedData.length === 0 && !loading && (
-            <div style={{ padding: '60px', textAlign: 'center', color: '#64748b' }}>
-              <Search size={48} style={{ marginBottom: '16px', opacity: 0.2 }} />
-              <div>Kayıt bulunamadı. Lütfen lokasyon seçin veya aramayı değiştirin.</div>
-            </div>
-          )}
-          
-          {processedData.map((group: any, idx: number) => (
-            <div key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-              <div style={{ padding: '12px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {groupBy === 'ORDER' ? <LayoutGrid size={16} color="#3b82f6" /> : <Boxes size={16} color="#f59e0b" />}
-                <span style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b' }}>
-                  {groupBy === 'ORDER' ? `Sipariş: ${group.orderNo}` : `Malzeme: ${group.matCode}`}
-                </span>
-                <span style={{ fontSize: '13px', color: '#64748b' }}>
-                  {groupBy === 'ORDER' ? group.productName : group.matName}
-                </span>
-                <div style={{ marginLeft: 'auto', background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
-                  {group.items.length} Kalem
+        <div className="pro-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Rapor Header (Filtreler & İstatistikler) */}
+          <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ position: 'relative' }}>
+                    <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input className="pro-input" placeholder="Sonuçlarda ara..." style={{ paddingLeft: '36px', width: '250px' }} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 </div>
-              </div>
-              <table className="pro-table">
-                <thead>
-                  <tr>
-                    <th>Hammadde</th>
-                    <th>Gereken</th>
-                    <th>Stok</th>
-                    <th>Açık</th>
-                    <th>Durum</th>
-                    <th>Tedarik / Yolda</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.items.map((item: MrpItem, iIdx: number) => {
-                    const isShortage = item.HamStok < item.GerekenMik;
-                    return (
-                      <tr key={iIdx}>
-                        <td>
-                          <div style={{ fontWeight: '600' }}>{item.HamAd}</div>
-                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>{item.HamKod}</div>
-                        </td>
-                        <td>{item.GerekenMik.toLocaleString()}</td>
-                        <td>{item.HamStok.toLocaleString()}</td>
-                        <td style={{ color: isShortage ? '#dc2626' : 'inherit', fontWeight: isShortage ? '700' : 'normal' }}>
-                          {isShortage ? (item.GerekenMik - item.HamStok).toLocaleString() : '0'}
-                        </td>
-                        <td>
-                          <span className={`pro-badge ${isShortage ? 'pro-badge-error' : 'pro-badge-success'}`}>
-                            {isShortage ? 'EKSİK' : 'OK'}
-                          </span>
-                        </td>
-                        <td>
-                          {item.YoldakiMik > 0 ? (
-                            <div style={{ fontSize: '12px' }}>
-                              <div style={{ color: '#0369a1', fontWeight: '600' }}>
-                                <Truck size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
-                                {item.YoldakiMik.toLocaleString()} Bekliyor
-                              </div>
-                              <div style={{ color: '#64748b', fontSize: '10px' }}>
-                                Termin: {new Date(item.TedarikTarihi!).toLocaleDateString()}
-                              </div>
-                            </div>
-                          ) : <span style={{ color: '#cbd5e1' }}>-</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                    <FilterBtn active={filterStatus === 'ALL'} onClick={() => setFilterStatus('ALL')} label="Tümü" />
+                    <FilterBtn active={filterStatus === 'CRITICAL'} onClick={() => setFilterStatus('CRITICAL')} label="Kritik (Eksik)" color="#ef4444" />
+                </div>
             </div>
-          ))}
+
+            <div style={{ display: 'flex', gap: '24px' }}>
+                <MiniStat label="Kritik Eksik" value={stats.criticalCount} color="#ef4444" />
+                <MiniStat label="Hazır" value={stats.okCount} color="#10b981" />
+                <button onClick={fetchMrpAnalysis} className="pro-button" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Raporu Güncelle
+                </button>
+            </div>
+          </div>
+
+          {/* Rapor İçeriği (Table) */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {processedData.length === 0 && !loading ? (
+                 <div style={{ padding: '80px', textAlign: 'center', color: '#64748b' }}>
+                    <Database size={40} style={{ margin: '0 auto 15px', opacity: 0.3 }} />
+                    <p>Seçilen lokasyon için gösterilecek veri bulunamadı.</p>
+                 </div>
+            ) : (
+                processedData.map((group: any, idx: number) => (
+                    <div key={idx} style={{ marginBottom: '1px' }}>
+                      <div style={{ padding: '10px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {groupBy === 'ORDER' ? <LayoutGrid size={14} color="#3b82f6" /> : <Boxes size={14} color="#f59e0b" />}
+                        <span style={{ fontWeight: '700', fontSize: '13px' }}>{groupBy === 'ORDER' ? `Sipariş: ${group.orderNo}` : `Malzeme: ${group.matCode}`}</span>
+                        <span style={{ fontSize: '13px', color: '#64748b' }}>{groupBy === 'ORDER' ? group.productName : group.matName}</span>
+                      </div>
+                      <table className="pro-table">
+                        <thead>
+                          <tr>
+                            <th>Hammadde / Bileşen</th>
+                            <th>Gereken</th>
+                            <th>Stok</th>
+                            <th>Açık Mik.</th>
+                            <th>Durum</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.items.map((item: MrpItem, iIdx: number) => {
+                            const isShortage = item.HamStok < item.GerekenMik;
+                            return (
+                              <tr key={iIdx}>
+                                <td>
+                                  <div style={{ fontWeight: '600' }}>{item.HamAd}</div>
+                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>{item.HamKod}</div>
+                                </td>
+                                <td>{item.GerekenMik.toLocaleString()}</td>
+                                <td>{item.HamStok.toLocaleString()}</td>
+                                <td style={{ color: isShortage ? '#dc2626' : 'inherit', fontWeight: isShortage ? '700' : 'normal' }}>
+                                  {isShortage ? (item.GerekenMik - item.HamStok).toLocaleString() : '0'}
+                                </td>
+                                <td>
+                                  <span className={`pro-badge ${isShortage ? 'pro-badge-error' : 'pro-badge-success'}`}>
+                                    {isShortage ? 'EKSİK' : 'OK'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-const ViewTab = ({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: any, label: string }) => (
-  <button 
-    onClick={onClick}
-    style={{
-      display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 16px', borderRadius: '6px', border: 'none',
-      background: active ? '#fff' : 'transparent', color: active ? '#2563eb' : '#64748b',
-      boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', fontWeight: '600', fontSize: '13px', cursor: 'pointer'
-    }}
-  >
-    {icon} {label}
-  </button>
-);
+// --- Alt Bileşenler ve Stiller ---
 
-const MiniStatCard = ({ label, value, color }: { label: string, value: any, color: string }) => (
-  <div style={{ padding: '0 16px', textAlign: 'center', borderRight: '1px solid #e2e8f0' }}>
-    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>{label}</div>
-    <div style={{ fontSize: '16px', fontWeight: '800', color }}>{value}</div>
-  </div>
+const paramLabelStyle: React.CSSProperties = { fontSize: '11px', fontWeight: '800', color: '#64748b', display: 'flex', alignItems: 'center', marginBottom: '6px', textTransform: 'uppercase' };
+const paramInputStyle: React.CSSProperties = { border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', width: '100%', fontWeight: '600' };
+
+const activeTabStyle: React.CSSProperties = { flex: 1, padding: '6px', border: 'none', background: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '700', color: '#2563eb', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' };
+const inactiveTabStyle: React.CSSProperties = { flex: 1, padding: '6px', border: 'none', background: 'transparent', fontSize: '12px', fontWeight: '600', color: '#64748b', cursor: 'pointer' };
+
+const MiniStat = ({ label, value, color }: { label: string, value: any, color: string }) => (
+    <div style={{ textAlign: 'right' }}>
+        <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontSize: '14px', fontWeight: '800', color }}>{value}</div>
+    </div>
 );
 
 const FilterBtn = ({ active, onClick, label, color = '#2563eb' }: { active: boolean, onClick: () => void, label: string, color?: string }) => (
-  <button 
-    onClick={onClick}
-    style={{
-      padding: '4px 16px', borderRadius: '6px', border: active ? `1px solid ${color}` : '1px solid #e2e8f0',
-      background: active ? `${color}11` : '#fff', color: active ? color : '#64748b',
-      fontWeight: '700', fontSize: '12px', cursor: 'pointer'
-    }}
-  >
-    {label}
-  </button>
+    <button onClick={onClick} style={{ padding: '4px 12px', borderRadius: '6px', border: active ? `1px solid ${color}` : '1px solid #e2e8f0', background: active ? `${color}11` : '#fff', color: active ? color : '#64748b', fontWeight: '700', fontSize: '12px', cursor: 'pointer' }}>
+      {label}
+    </button>
 );
 
 export default MaterialAnalysis;
