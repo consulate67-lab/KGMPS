@@ -17,7 +17,7 @@ const PlanningCenter: React.FC<PlanningCenterProps> = ({ tenantId, onBack }) => 
   const [activeTab, setActiveTab] = useState<'MRP' | 'GANTT' | 'KPI'>('MRP');
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0a0f18', overflow: 'hidden' }}>
       {/* Top Main Nav */}
       <div style={{ 
         background: '#0f172a', 
