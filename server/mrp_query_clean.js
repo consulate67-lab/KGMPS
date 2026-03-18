@@ -1,12 +1,22 @@
 /* 
-  MRP Analysis Query - Ported from User Snippet
-  Grouping logic updated: Grouping is now based ONLY on Raw Material (hskod, HRKod, HBedKod).
-  Product-specific details (ModelKod, URKod, UBedKod) are removed from the final result set.
+  MRP Analysis Query - Advanced Version
+  - Supports multiple PRODUCTION locations
+  - Supports multiple RAW MATERIAL locations
+  - Groups results by Raw Material + Color (Size excluded from grouping as requested)
 */
-const getMrpQuery = (location) => {
-  const loc = location || 'K0001';
+const getMrpQuery = (prodLocs, rawLocs) => {
+  // Gelen virgüllü stringleri SQL için 'K0001','K0003' formatına çeviriyoruz
+  const formatLocs = (locString) => {
+    if (!locString) return "''";
+    return locString.split(',').map(l => `'${l.trim()}'`).join(',');
+  };
+
+  const pLocs = formatLocs(prodLocs || 'K0001');
+  const rLocs = formatLocs(rawLocs || 'K0001');
+
   return `
-    DECLARE @locationParam nvarchar(50) = '${loc}';
+    -- Lokasyon Parametreleri (İç sorgularda kullanılmak üzere)
+    -- Not: SQL Batch içerisinde dinamik IN kullanımı için string replace yapılmıştır.
 
     -- DECLARATIONS
     declare @Model_Pd_si Table (  
@@ -24,16 +34,6 @@ const getMrpQuery = (location) => {
         MKod varchar(30), mik float, Tmik float, PMik float
     );
 
-    declare @Model_Pd Table (  
-        xskod varchar(15), xrkod int, xbkod int, xFisno int, xFinx int,
-        ModelKod varchar(30), Proses varchar(2), Parcainx int,
-        SKod varchar(30), Miktar float, Birim varchar(10),
-        Tip varchar(1), Location varchar(5), Tanim varchar(250),
-        Resim varchar(100), HMikMod float, PrintOp varchar(1),
-        r1 int, r2 int, r3 int, b1 int, b2 int, b3 int,
-        uBedGrp varchar(4), hBedGrp varchar(4)
-    );
-
     declare @TableHamGroup TABLE (  
         EmirNo int, ModelKod varchar(30), Proses varchar(2), uskod varchar(15), USKod_Tanim varchar(100), 
         hskod varchar(15), HSKod_Tanim varchar(100), SipTar datetime, TeslimTar datetime, TerminTarihi datetime, 
@@ -44,7 +44,7 @@ const getMrpQuery = (location) => {
         Miktar3 float, Miktar4 float, HBirim varchar(10)
     );
 
-    -- 1. DATA COLLECTION BLOCKS
+    -- 1. DATA COLLECTION - Production/Order Locations
     insert @Model_Pd_si 
     select si.skod, si.Rkod, si.BedKod, si.FisNo, si.FisHarInx, isnull(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp, null, Null, Null, null, Null, Null, st1.bedkod, st2.bedkod 
     From (siparis_kay sk join siparis_har sh on (sk.SipNo=sh.SipNo) and ((sh.Durum='')or(sh.durum is null)))
@@ -53,21 +53,12 @@ const getMrpQuery = (location) => {
     left outer join Urt_Plan_ozdur upo on (upo.SipNo=sk.SipNo) and (upo.SipHarinx=sh.Sipharinx) and (upo.urkod=si.rkod) and (upo.ubedkod=si.Bedkod) and (upo.Activid=0) and (upo.HEvent='*')
     join model_PD pd on (pd.ModelKod = isnull(upm.ModelKod,'')) and (upo.proses=pd.proses) and (upo.parcainx=pd.parcainx)
     Left Outer join StokKart st1 on (st1.SKod=sh.SKod)
-    Left Outer Join Model_M MoMa On (MoMa.ModelKod=pd.ModelKod)
-    Left Outer Join Dbo.P_RNK_Tip rn1 On (rn1.Renk_kod=si.Rkod)
-    Left Outer Join Dbo.P_Beden_D Bed1 on (Bed1.Bedinx=si.Bedkod)
-    Left Outer Join StokKart st2 on (st2.SKod=pd.SKod)
-    Left Outer Join Dbo.P_RNK_Tip rn2 On (rn2.Renk_kod=(case when not exists(select top 1 1 from s_gchar sgrr where sgrr.skod=si.SKod and sgrr.modul='X' and FisNo=0 and FisHarInx=0 and Location='') then isnull((select rkod from Model_PDS2R s2r Where (s2r.ModelKod=pd.ModelKod) and (s2r.Proses=pd.Proses) and (s2r.Parcainx=pd.Parcainx) and (s2r.skod=si.SKod)), (select top 1 isnull(RKod,0) from s_gchar sghh where (sghh.skod=pd.SKod) and (sghh.BedKod=0) and (sghh.Modul='X') and FisNo=0 and FisHarInx=0 and Location='')) else isnull((select rkod2 From Model_R2R Where (ModelKod=pd.ModelKod Collate turkish_ci_as) and (Proses=pd.Proses Collate turkish_ci_as) and (Parcainx=pd.Parcainx) and (RKod1=si.RKod)), isnull((Select RKod From S_GCHar dx Where (dx.skod=pd.SKod) and (dx.RKod=si.RKod) and (dx.BedKod=0) and (dx.Modul='X') and FisNo=0 and FisHarInx=0 and Location=''), (Select min(isnull(RKod,0)) From S_GCHar gc Where (skod=pd.SKod) and (BedKod=0) and (Modul='X') and FisNo=0 and FisHarInx=0 and Location=''))) end))
-    Left Outer Join Dbo.P_Beden_D Bed2 on (Bed2.Bedinx=(case when (isnull(st1.bedkod,'')='') then isnull((select xkod from Model_PDS2X s2x Where (s2x.ModelKod=pd.ModelKod) and (s2x.Proses=pd.Proses) and (s2x.Parcainx=pd.Parcainx) and (s2x.skod=si.SKod)), (select min(bedinx) From Dbo.P_Beden_D dd Where dd.BedKod=st2.bedkod)) else isnull((select Bedkod2 From Model_B2B Where (ModelKod=pd.ModelKod Collate turkish_ci_as) and (Proses=pd.Proses Collate turkish_ci_as) and (Parcainx=pd.Parcainx) and (BedKod1=si.BedKod)), (case when st1.bedkod=st2.bedkod then si.BedKod else (select min(bedinx) From Dbo.P_Beden_D dd Where dd.BedKod=st2.bedkod) end)) end))
-    Left Outer Join Cari_Kart cr on (cr.CKod=sk.CariKod)
-    Where (sk.SipTip='S') and (sk.SipTur = 'N') AND ((sk.Durum='')or(sk.Durum is Null)) AND ((sh.Durum='')or(sh.durum is null)) AND (sk.Location = @locationParam)
+    Where (sk.SipTip='S') and (sk.SipTur = 'N') AND ((sk.Durum='')or(sk.Durum is Null)) AND (sk.Location IN (${pLocs}))
     Group by si.skod, si.Rkod, si.BedKod, si.FisNo, si.FisHarInx, isnull(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp, st1.bedkod, st2.bedkod;
 
     insert into @urtln select xskod, xrkod, xbkod, xFisNo, xFinx, ModelKod, sum(Mik), sum(Tmik), sum(PMik) from (
         select ii.xskod, ii.xrkod, ii.xbkod, ii.xFisno, ii.xFinx, ii.ModelKod, sum(isNull(xx.Giren,0)-isNull(xx.Cikan,0)) as Mik, 0 as TMik, sum(isNull(xx.Giren,0)-isNull(xx.Cikan,0)) as PMik from (select xskod, xrkod, xbkod, xfisno, xfinx, modelkod from @Model_Pd_si group by xskod, xrkod, xbkod, xfisno, xfinx, modelkod) ii left outer join Urt_plan_gch xx on xx.skod=ii.xskod and xx.rkod=ii.xrkod and xx.bedkod=ii.xbkod and xx.FisNo=ii.xFisNo and xx.Fisharinx=ii.xFinx Group by ii.xskod, ii.xrkod, ii.xbkod, ii.xFisNo, ii.xFinx, ii.ModelKod
         union all select ii.xskod, ii.xrkod, ii.xbkod, ii.xFisno, ii.xFinx, ii.ModelKod, 0 as Mik, sum(isNull(xx.Giren,0)) as TMik, 0 as PMik from (select xskod, xrkod, xbkod, xfisno, xfinx, modelkod from @Model_Pd_si group by xskod, xrkod, xbkod, xfisno, xfinx, modelkod) ii left outer join si_gchar xx on xx.skod=ii.xskod and xx.rkod=ii.xrkod and xx.bedkod=ii.xbkod and xx.FisNo=ii.xFisNo and xx.FisharInx=ii.xFinx Group by ii.xskod, ii.xrkod, ii.xbkod, ii.xFisNo, ii.xFinx, ii.ModelKod
-        union all select skod, rkod, bedkod, FisNo, Fisharinx, em.ModelKod, sum(isNull(Giren,0)) as mik, 0 as TMik, 0 as PMik from Urt_Em_gch xx left outer join Urt_Emir em on em.EmirNo=xx.EmirNo Where exists(select fisno from @Model_Pd_si x Where x.xFisNo=xx.FisNo and x.xFinx=xx.FisHarinx and x.xrkod=xx.rkod and x.xbkod=xx.bedkod) Group by skod, rkod, bedkod, FisNo, Fisharinx, em.ModelKod
-        union all select skod, rkod, bedkod, FisNo, Fisharinx, em.ModelKod, sum(isNull(Giren,0)) as mik, 0 as TMik, 0 as PMik from UrtX_Em_gch xx left outer join Urtx_Emir em on em.EmirNo=xx.EmirNo Where exists(select fisno from @Model_Pd_si x Where x.xFisNo=xx.FisNo and x.xFinx=xx.FisHarinx and x.xrkod=xx.rkod and x.xbkod=xx.bedkod) Group by skod, rkod, bedkod, FisNo, Fisharinx, em.ModelKod
     ) xx Group by xskod, xrkod, xbkod, xFisNo, xFinx, ModelKod;
 
     -- 2. MAIN PROCESSING
@@ -89,24 +80,25 @@ const getMrpQuery = (location) => {
     OUTER APPLY dbo.kg_ifn_GetConvStkMik(si.skod,isnull(si.giren,0)-isnull(si.cikan,0)-isnull(xxxx.mik,0) ,sh.Birim,st1.Birim ) as fn_SiparisMik
     OUTER APPLY dbo.kg_ifn_Model_HamMik (si.skod,si.rkod,si.BedKod,pd.ModelKod,pd.Proses,pd.Parcainx,sk.Sipno,sh.Sipharinx,isnull(upo.Activid,0)) as fn_ModelHamMik
     Left Outer Join Cari_Kart cr on (cr.CKod=sk.CariKod)
-    Where (sk.SipTip='S') and (isnull(upo.HEvent,'')<>'-') and (xxxx.FisNo is not null) AND (sk.SipTur = 'N') AND ((sk.Durum='')or(sk.Durum is Null)) AND ((sh.Durum='')or(sh.durum is null)) AND (sk.Location = @locationParam)
+    Where (sk.SipTip='S') and (isnull(upo.HEvent,'')<>'-') and (xxxx.FisNo is not null) AND (sk.SipTur = 'N') AND ((sk.Durum='')or(sk.Durum is Null)) AND (sk.Location IN (${pLocs}))
     Group by MoMa.ModelKod, pd.Proses, st1.skod, st1.Tanim, isnull(upo.HSKod,pd.skod), st2.Tanim, sk.SipTar, sk.TeslimTar, sh.TerminTarihi, sh.Tanim, sk.SipNo, sk.CariKod, cr.CName, sk.BelgeNo, st1.GrupKod, st1.StokTip, si.RKod, rn1.Tanim, bed1.bedinx, Bed1.Beden, st2.StokSekli, st2.GrupKod, st2.StokTip, st2.BEDKod, isnull(rn2.Renk_kod,0) as HRKod, isnull(rn2.Tanim,'') as HRKod_Tanim, Bed2.Bedinx as HBedKod, Bed2.Beden as HBeden, (isnull(upo.HBirim,pd.Birim));
 
-    -- 3. FINAL OUTPUT - Grouped ONLY by Raw Material
+    -- 3. FINAL OUTPUT - Grouped by Raw Material + Color (Size removed from grouping)
     Select 
-        hskod, 
-        HSKod_Tanim, 
-        HRKod_Tanim, 
-        HBeden, 
-        HBirim,
-        Sum(Miktar1) as Miktar1, 
-        Sum(Miktar2) as Miktar2, 
-        Sum(Miktar3) as Miktar3, 
-        Sum(Miktar4) as Miktar4,
-        Sum(isNull(Miktar1,0)+isNull(Miktar2,0)+isNull(Miktar3,0)+isNull(Miktar4,0)) as MiktarTop
-    From @TableHamGroup
-    Group By hskod, HSKod_Tanim, HRKod_Tanim, HBeden, HBirim
-    Having (Sum(isNull(Miktar1,0)+isNull(Miktar2,0)+isNull(Miktar3,0)+isNull(Miktar4,0)) > 0);
+        ma.hskod, 
+        ma.HSKod_Tanim, 
+        ma.HRKod_Tanim, 
+        '' as HBeden, -- Beden bilgisini siliyoruz veya boş bırakıyoruz
+        ma.HBirim,
+        Sum(ma.Miktar1) as Miktar1, 
+        Sum(ma.Miktar2) as Miktar2, 
+        Sum(ma.Miktar3) as Miktar3, 
+        Sum(ma.Miktar4) as Miktar4,
+        Sum(isNull(ma.Miktar1,0)+isNull(ma.Miktar2,0)+isNull(ma.Miktar3,0)+isNull(ma.Miktar4,0)) as MiktarTop
+    From @TableHamGroup ma
+    Group By ma.hskod, ma.HSKod_Tanim, ma.HRKod_Tanim, ma.HBirim
+    Having (Sum(isNull(ma.Miktar1,0)+isNull(ma.Miktar2,0)+isNull(ma.Miktar3,0)+isNull(ma.Miktar4,0)) > 0)
+    Order By ma.hskod, ma.HRKod_Tanim;
   `;
 };
 

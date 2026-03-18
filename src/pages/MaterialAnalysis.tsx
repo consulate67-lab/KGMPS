@@ -1,91 +1,82 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
-  RefreshCw, Search, 
-  LayoutGrid, Boxes, AlertCircle, Settings2, Filter, Database
+  RefreshCw, Search, Boxes, AlertCircle, Settings2, 
+  Database, LogOut, X, Check, Filter
 } from 'lucide-react';
 import '../styles/professional.css';
 
 interface Location {
-  id: any;
+  id: string;
   name: string;
 }
 
 interface MrpItem {
-  Siparis_No: string | number;
-  USKod_Tanim: string;
-  uskod: string;
   hskod: string;
   HSKod_Tanim: string;
+  HRKod_Tanim: string;
+  HBirim: string;
   Miktar1: number; // Gerçek Sipariş İhtiyacı
   Miktar2: number; // Planlanan İhtiyaç
   Miktar3: number; // Emir İhtiyacı
   Miktar4: number; // Devam Eden
   MiktarTop: number; // Toplam İhtiyaç
-  Siparis_Miktar: number; // Mevcut Stok/Durum
-  HBirim: string;
 }
 
 interface MaterialAnalysisProps {
   tenantId: number | null;
 }
 
-const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId }) => {
+const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
   const [loading, setLoading] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
   
-  // Parametreler
-  const [mrpLocation, setMrpLocation] = useState('');
-  const [marketingLocation, setMarketingLocation] = useState('');
+  // Kalıcı Ayarlar (LocalStorage)
+  const [prodLocs, setProdLocs] = useState<string[]>(() => {
+    const saved = localStorage.getItem('mrp_prod_locs');
+    return saved ? saved.split(',') : ['K0001'];
+  });
+  
+  const [rawLocs, setRawLocs] = useState<string[]>(() => {
+    const saved = localStorage.getItem('mrp_raw_locs');
+    return saved ? saved.split(',') : ['K0001'];
+  });
   
   const [mrpData, setMrpData] = useState<MrpItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'CRITICAL' | 'OK'>('ALL');
-  const [groupBy, setGroupBy] = useState<'ORDER' | 'MATERIAL'>('ORDER');
   const [error, setError] = useState<string | null>(null);
 
   const isLocal = window.location.hostname === 'localhost';
-  const isGithub = window.location.hostname.includes('github.io');
-  const apiBase = (isLocal || isGithub) 
-    ? 'https://kgmps-production.up.railway.app' 
-    : window.location.origin;
+  const apiBase = isLocal ? 'http://localhost:5000' : 'https://kgmps-production.up.railway.app';
 
   const fetchLocations = async () => {
-    const url = `${apiBase}/api/locations`;
-    const token = localStorage.getItem('token');
-    
-    console.log(`[DEBUG] İstek gönderiliyor: ${url}`);
-    console.log(`[DEBUG] Token durumu: ${token ? 'Mevcut (Giriş yapılmış)' : 'YOK (Giriş yapılmamış!)'}`);
-    
-    if (!token) {
-      setError("Oturumunuz sona ermiş. Lütfen tekrar giriş yapın (401 - Token Missing).");
-      return;
-    }
-
     try {
-      const res = await axios.get(url, {
-        headers: { 
-          'Authorization': `Bearer ${token}`
-        }
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`${apiBase}/api/locations`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       setLocations(res.data);
-      if (res.data.length > 0) {
-        setMrpLocation(res.data[0].id); // ID (K0001 vb) gönderelim
-        setMarketingLocation(res.data[0].id);
-      }
     } catch (err: any) {
-      setError(`Lokasyonlar yüklenemedi: ${err.message}`);
+      console.error('Lokasyonlar yüklenemedi');
     }
   };
 
   const fetchMrpAnalysis = useCallback(async () => {
-    if (!mrpLocation) return;
+    if (prodLocs.length === 0 || rawLocs.length === 0) {
+      setError("Lütfen en az bir lokasyon seçin (Ayarlar menüsünden).");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(`${apiBase}/api/production/mrp`, {
-        params: { location: mrpLocation },
+        params: { 
+          prodLocs: prodLocs.join(','), 
+          rawLocs: rawLocs.join(',') 
+        },
         headers: { Authorization: `Bearer ${token}` }
       });
       setMrpData(res.data);
@@ -94,216 +85,273 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
     } finally {
       setLoading(false);
     }
-  }, [mrpLocation, apiBase]);
+  }, [prodLocs, rawLocs, apiBase]);
 
   useEffect(() => { fetchLocations(); }, []);
-  useEffect(() => { if (mrpLocation) fetchMrpAnalysis(); }, [mrpLocation, fetchMrpAnalysis]);
+  useEffect(() => { fetchMrpAnalysis(); }, [fetchMrpAnalysis]);
 
-  const processedData = useMemo(() => {
-    const filtered = mrpData.filter(item => {
-      const name = item.HSKod_Tanim || '';
-      const order = String(item.Siparis_No) || '';
-      const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           order.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const isCritical = (0) < item.MiktarTop; // Geçici olarak stock=0 varsayıyoruz
-      if (filterStatus === 'CRITICAL') return matchesSearch && isCritical;
-      if (filterStatus === 'OK') return matchesSearch && !isCritical;
-      return matchesSearch;
-    });
-
-    if (groupBy === 'ORDER') {
-      const groups: Record<string, { orderNo: string, productName: string, items: MrpItem[] }> = {};
-      filtered.forEach(item => {
-        const key = String(item.Siparis_No);
-        if (!groups[key]) groups[key] = { orderNo: key, productName: item.USKod_Tanim, items: [] };
-        groups[key].items.push(item);
-      });
-      return Object.values(groups);
-    } else {
-      const groups: Record<string, { matCode: string, matName: string, items: MrpItem[] }> = {};
-      filtered.forEach(item => {
-        const key = item.hskod;
-        if (!groups[key]) groups[key] = { matCode: key, matName: item.HSKod_Tanim, items: [] };
-        groups[key].items.push(item);
-      });
-      return Object.values(groups);
-    }
-  }, [mrpData, searchTerm, filterStatus, groupBy]);
-
-  const stats = {
-    totalItems: mrpData.length,
-    criticalCount: mrpData.filter(i => (0) < i.MiktarTop).length,
-    okCount: mrpData.filter(i => (0) >= i.MiktarTop).length,
-    totalShortage: mrpData.reduce((acc, i) => acc + i.MiktarTop, 0)
+  // Ayarları Kaydet
+  const saveSettings = () => {
+    localStorage.setItem('mrp_prod_locs', prodLocs.join(','));
+    localStorage.setItem('mrp_raw_locs', rawLocs.join(','));
+    setShowSettings(false);
+    fetchMrpAnalysis();
   };
 
+  const toggleLoc = (id: string, list: string[], setter: (v: string[]) => void) => {
+    if (list.includes(id)) {
+      setter(list.filter(item => item !== id));
+    } else {
+      setter([...list, id]);
+    }
+  };
+
+  const filteredData = mrpData.filter(item => 
+    item.hskod?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.HSKod_Tanim?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc', overflow: 'hidden' }}>
+    <div className="min-h-screen bg-[#0a0f18] text-slate-200 font-sans selection:bg-blue-500/30">
       
-      {/* 1. PARAMETRE PANELİ (Üst Alan) */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '16px 24px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-            <Settings2 size={16} color="#475569" />
-            <span style={{ fontWeight: '700', fontSize: '13px', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rapor Parametreleri / Lokasyon Seçimleri</span>
+      {/* Üst Bar */}
+      <div className="sticky top-0 z-50 bg-[#0f172a]/80 backdrop-blur-md border-b border-white/5 px-6 py-3 flex items-center justify-between shadow-2xl">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/40">
+            <Boxes className="text-white" size={20} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent leading-tight">
+              Malzeme Analizi (MRP)
+            </h1>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Hammadde İhtiyaç Planlama</p>
+          </div>
         </div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
-            {/* MRP Lokasyon */}
-            <div className="param-item">
-                <label style={paramLabelStyle}><Database size={12} style={{marginRight: '6px'}} /> Stok & Tedarik Lokasyonu</label>
-                <select className="pro-input" style={paramInputStyle} value={mrpLocation} onChange={(e) => setMrpLocation(e.target.value)}>
-                    {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
-                </select>
-            </div>
 
-            {/* Pazarlama Lokasyon */}
-            <div className="param-item">
-                <label style={paramLabelStyle}><Filter size={12} style={{marginRight: '6px'}} /> Pazarlama Siparişleri</label>
-                <select className="pro-input" style={paramInputStyle} value={marketingLocation} onChange={(e) => setMarketingLocation(e.target.value)}>
-                    {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
-                </select>
-            </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowSettings(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-semibold transition-all group"
+          >
+            <Settings2 size={16} className="text-blue-400 group-hover:rotate-45 transition-transform" />
+            Lokasyon Ayarları
+          </button>
+          
+          <div className="h-6 w-px bg-white/10 mx-1"></div>
 
-            {/* Grup Seçimi */}
-            <div className="param-item">
-                <label style={paramLabelStyle}>Görünüm Gruplama</label>
-                <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
-                    <button 
-                        onClick={() => setGroupBy('ORDER')} 
-                        style={groupBy === 'ORDER' ? activeTabStyle : inactiveTabStyle}
-                    >Sipariş</button>
-                    <button 
-                        onClick={() => setGroupBy('MATERIAL')} 
-                        style={groupBy === 'MATERIAL' ? activeTabStyle : inactiveTabStyle}
-                    >Hammadde</button>
-                </div>
-            </div>
+          <button 
+            onClick={() => { localStorage.clear(); window.location.href='/'; }}
+            className="p-2 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded-lg transition-colors group"
+            title="Çıkış"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
       </div>
 
-      {/* 2. RAPOR ALANI */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px', overflow: 'hidden' }}>
-        
-        {error && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#dc2626', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <AlertCircle size={18} /> {error}
-            </div>
-        )}
-
-        <div className="pro-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Rapor Header (Filtreler & İstatistikler) */}
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                <div style={{ position: 'relative' }}>
-                    <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input className="pro-input" placeholder="Sonuçlarda ara..." style={{ paddingLeft: '36px', width: '250px' }} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                    <FilterBtn active={filterStatus === 'ALL'} onClick={() => setFilterStatus('ALL')} label="Tümü" />
-                    <FilterBtn active={filterStatus === 'CRITICAL'} onClick={() => setFilterStatus('CRITICAL')} label="Kritik (Eksik)" color="#ef4444" />
-                </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '24px' }}>
-                <MiniStat label="Kritik Eksik" value={stats.criticalCount} color="#ef4444" />
-                <MiniStat label="Hazır" value={stats.okCount} color="#10b981" />
-                <button onClick={fetchMrpAnalysis} className="pro-button" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Raporu Güncelle
-                </button>
-            </div>
+      <main className="p-6">
+        {/* Araçlar ve Filtreler */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div className="relative group w-full max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors" size={18} />
+            <input 
+              type="text"
+              placeholder="Hammadde Ara..."
+              className="w-full pl-12 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all text-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
 
-          {/* Rapor İçeriği (Table) */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {processedData.length === 0 && !loading ? (
-                 <div style={{ padding: '80px', textAlign: 'center', color: '#64748b' }}>
-                    <Database size={40} style={{ margin: '0 auto 15px', opacity: 0.3 }} />
-                    <p>Seçilen lokasyon için gösterilecek veri bulunamadı.</p>
-                 </div>
-            ) : (
-                processedData.map((group: any, idx: number) => (
-                    <div key={idx} style={{ marginBottom: '1px' }}>
-                      <div style={{ padding: '10px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        {groupBy === 'ORDER' ? <LayoutGrid size={14} color="#3b82f6" /> : <Boxes size={14} color="#f59e0b" />}
-                        <span style={{ fontWeight: '700', fontSize: '13px' }}>{groupBy === 'ORDER' ? `Sipariş: ${group.orderNo}` : `Malzeme: ${group.matCode}`}</span>
-                        <span style={{ fontSize: '13px', color: '#64748b' }}>{groupBy === 'ORDER' ? group.productName : group.matName}</span>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => fetchMrpAnalysis()}
+              disabled={loading}
+              className={`p-2.5 rounded-xl border border-white/10 flex items-center justify-center transition-all ${loading ? 'opacity-50 cursor-not-allowed bg-blue-500/20' : 'bg-white/5 hover:bg-white/10 text-blue-400'}`}
+            >
+              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        </div>
+
+        {/* Veri Tablosu */}
+        <div className="bg-[#0f172a]/50 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-sm self-shadow">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-slate-500 font-bold border-b border-white/5">
+                <tr>
+                  <th className="px-6 py-4">Hammadde & Renk</th>
+                  <th className="px-6 py-4">Birim</th>
+                  <th className="px-6 py-4 text-center">Sipariş İhtiyacı</th>
+                  <th className="px-6 py-4 text-center">Planlanan İhtiyaç</th>
+                  <th className="px-6 py-4 text-center">Emir İhtiyacı</th>
+                  <th className="px-6 py-4 text-center">Devam Eden</th>
+                  <th className="px-6 py-4 text-center text-blue-400">Toplam İhtiyaç</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-20 text-center">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                        <p className="text-sm text-slate-400 font-medium">Veriler Hesaplanıyor...</p>
                       </div>
-                      <table className="pro-table">
-                        <thead>
-                          <tr>
-                            <th>Hammadde / Bileşen</th>
-                            <th>Sipariş</th>
-                            <th>Planlanan</th>
-                            <th>Emir</th>
-                            <th>D.Eden</th>
-                            <th>Top.İht</th>
-                            <th>Stok</th>
-                            <th>Açık</th>
-                            <th>Durum</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.items.map((item: MrpItem, iIdx: number) => {
-                            const stock = 0; // SQL çıktısında stok kolonu bulunamadığı için geçici olarak 0
-                            const needed = item.MiktarTop || 0;
-                            const isShortage = stock < needed;
-                            const diff = isShortage ? (needed - stock) : 0;
-                            
-                            return (
-                              <tr key={iIdx}>
-                                <td>
-                                  <div style={{ fontWeight: '600' }}>{item.HSKod_Tanim}</div>
-                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>{item.hskod}</div>
-                                </td>
-                                <td>{item.Miktar1?.toLocaleString()}</td>
-                                <td>{item.Miktar2?.toLocaleString()}</td>
-                                <td>{item.Miktar3?.toLocaleString()}</td>
-                                <td>{item.Miktar4?.toLocaleString()}</td>
-                                <td style={{fontWeight: '700'}}>{needed.toLocaleString()}</td>
-                                <td style={{color: '#10b981', fontWeight: '600'}}>{stock.toLocaleString()}</td>
-                                <td style={{ color: isShortage ? '#dc2626' : 'inherit', fontWeight: isShortage ? '700' : 'normal' }}>
-                                  {diff.toLocaleString()}
-                                </td>
-                                <td>
-                                  <span className={`pro-badge ${isShortage ? 'pro-badge-error' : 'pro-badge-success'}`}>
-                                    {isShortage ? 'EKSİK' : 'OK'}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))
-            )}
+                    </td>
+                  </tr>
+                ) : filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-20 text-center text-slate-500 italic">
+                      <div className="flex flex-col items-center gap-2">
+                        <AlertCircle size={32} className="opacity-20 mb-2" />
+                        Veri Bulunamadı
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredData.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-white/[0.02] transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">
+                          {item.hskod}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
+                          <Database size={12} className="text-slate-600" />
+                          {item.HSKod_Tanim}
+                        </span>
+                        <span className="text-[10px] text-indigo-400/80 font-bold mt-1 bg-indigo-500/10 w-fit px-1.5 rounded">
+                          {item.HRKod_Tanim}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-[10px] px-2 py-0.5 bg-white/5 border border-white/10 rounded-full font-bold">
+                        {item.HBirim}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center font-mono text-xs">{item.Miktar1?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center font-mono text-xs text-orange-400">{item.Miktar2?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center font-mono text-xs text-purple-400">{item.Miktar3?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center font-mono text-xs text-teal-400">{item.Miktar4?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center font-mono text-sm font-bold text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">
+                      {item.MiktarTop?.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
+
+        {error && (
+          <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400 text-sm animate-pulse">
+            <AlertCircle size={18} />
+            {error}
+          </div>
+        )}
+      </main>
+
+      {/* Ayarlar Modalı (Side Overlay) */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[100] flex justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
+          <div className="relative w-full max-w-md bg-[#0f172a] border-l border-white/10 shadow-3xl flex flex-col animate-slide-left h-screen">
+            
+            <div className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <Settings2 className="text-blue-400" size={20} />
+                <h2 className="text-lg font-bold">Sistem Ayarları</h2>
+              </div>
+              <button 
+                onClick={() => setShowSettings(false)}
+                className="p-2 hover:bg-white/5 rounded-full text-slate-400 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              
+              {/* Üretim Lokasyonları */}
+              <section>
+                <div className="flex items-center gap-2 mb-4 text-sm font-bold text-blue-400">
+                  <RefreshCw size={16} />
+                  Sipariş & Üretim Depoları
+                </div>
+                <p className="text-[11px] text-slate-500 mb-3 ml-6 font-medium leading-relaxed">Siparişlerin ve üretim emirlerinin durumunun kontrol edileceği depolar.</p>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-white/10">
+                  {locations.map(loc => (
+                    <button
+                      key={loc.id}
+                      onClick={() => toggleLoc(loc.id, prodLocs, setProdLocs)}
+                      className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                        prodLocs.includes(loc.id) 
+                        ? 'bg-blue-600/20 border-blue-500 text-white shadow-[0_0_15px_-5px_#3b82f6]' 
+                        : 'bg-white/5 border-white/10 text-slate-500 hover:border-white/20'
+                      }`}
+                    >
+                      {loc.name}
+                      {prodLocs.includes(loc.id) && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* Hammadde Lokasyonları */}
+              <section>
+                <div className="flex items-center gap-2 mb-4 text-sm font-bold text-indigo-400">
+                  <Filter size={16} />
+                  Hammadde & Satın Alma Depoları
+                </div>
+                <p className="text-[11px] text-slate-500 mb-3 ml-6 font-medium leading-relaxed">Mevcut stok ve satın alma ihtiyacının hesaplanacağı depolar.</p>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-white/10">
+                  {locations.map(loc => (
+                    <button
+                      key={loc.id}
+                      onClick={() => toggleLoc(loc.id, rawLocs, setRawLocs)}
+                      className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                        rawLocs.includes(loc.id) 
+                        ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-[0_0_15px_-5px_#6366f1]' 
+                        : 'bg-white/5 border-white/10 text-slate-500 hover:border-white/20'
+                      }`}
+                    >
+                      {loc.name}
+                      {rawLocs.includes(loc.id) && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+            </div>
+
+            <div className="p-6 border-t border-white/5 bg-slate-900/50">
+              <button 
+                onClick={saveSettings}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <Check size={20} />
+                Ayarları Kaydet ve Yenile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Animasyonlar */}
+      <style>{`
+        @keyframes slide-left {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-slide-left {
+          animation: slide-left 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+      `}</style>
+
     </div>
   );
 };
-
-// --- Alt Bileşenler ve Stiller ---
-
-const paramLabelStyle: React.CSSProperties = { fontSize: '11px', fontWeight: '800', color: '#64748b', display: 'flex', alignItems: 'center', marginBottom: '6px', textTransform: 'uppercase' };
-const paramInputStyle: React.CSSProperties = { border: '1px solid #cbd5e1', padding: '8px 12px', fontSize: '13px', width: '100%', fontWeight: '600' };
-
-const activeTabStyle: React.CSSProperties = { flex: 1, padding: '6px', border: 'none', background: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '700', color: '#2563eb', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' };
-const inactiveTabStyle: React.CSSProperties = { flex: 1, padding: '6px', border: 'none', background: 'transparent', fontSize: '12px', fontWeight: '600', color: '#64748b', cursor: 'pointer' };
-
-const MiniStat = ({ label, value, color }: { label: string, value: any, color: string }) => (
-    <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>{label}</div>
-        <div style={{ fontSize: '14px', fontWeight: '800', color }}>{value}</div>
-    </div>
-);
-
-const FilterBtn = ({ active, onClick, label, color = '#2563eb' }: { active: boolean, onClick: () => void, label: string, color?: string }) => (
-    <button onClick={onClick} style={{ padding: '4px 12px', borderRadius: '6px', border: active ? `1px solid ${color}` : '1px solid #e2e8f0', background: active ? `${color}11` : '#fff', color: active ? color : '#64748b', fontWeight: '700', fontSize: '12px', cursor: 'pointer' }}>
-      {label}
-    </button>
-);
 
 export default MaterialAnalysis;

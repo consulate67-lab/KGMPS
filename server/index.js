@@ -451,16 +451,17 @@ app.get('/api/production/mrp', async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).send('Yetkisiz.');
 
-    const { location } = req.query;
+    const { prodLocs, rawLocs } = req.query; // Virgülle ayrılmış listeler (E.g. K0001,K0003)
 
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
-        console.log(`[MRP DEBUG] İstek Alındı. Lokasyon: ${location}, Tenant: ${decoded.tenantId}`);
+        console.log(`[MRP DEBUG] İstek Alındı. ProdLocs: ${prodLocs}, RawLocs: ${rawLocs}, Tenant: ${decoded.tenantId}`);
         const pool = await getTenantPool(decoded.tenantId);
         
         console.log(`[DB INFO] Bağlanılan Sunucu: ${pool.config.server}, Veritabanı: ${pool.config.database}`);
 
-        const mpsSql = getMrpQuery(location || 'K0001');
+        // Artık iki parametreli fonksiyonu çağırıyoruz
+        const mpsSql = getMrpQuery(prodLocs, rawLocs);
         
         console.log(`[QUERY START] SQL Batch gönderiliyor... (Sorgu uzunluğu: ${mpsSql.length} karakter)`);
 
