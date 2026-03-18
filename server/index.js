@@ -453,25 +453,32 @@ app.get('/api/production/mrp', async (req, res) => {
     const { location } = req.query;
 
     try {
-        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
+        console.log(`[MRP DEBUG] İstek Alındı. Lokasyon: ${location}, Tenant: ${decoded.tenantId}`);
         const pool = await getTenantPool(decoded.tenantId);
         
-        // Bağlantı detaylarını logla (Güvenlik için şifreyi gizleyelim)
-        console.log(`[DB INFO] Bağlanılan Sunucu: ${pool.config.server}, Veritabanı: ${pool.config.database}, Kullanıcı: ${pool.config.user}`);
+        console.log(`[DB INFO] Bağlanılan Sunucu: ${pool.config.server}, Veritabanı: ${pool.config.database}`);
 
         const mpsSql = getMrpQuery(location || 'K0001');
         
-        // DEBUG: Sorguyu konsola yazdır
-        console.log(`[${new Date().toISOString()}] MRP Sorgusu Başlatılıyor. Lokasyon: ${location || 'K0001'}`);
-        // console.log('Sorgu Metni:', mpsSql); // Çok uzun olduğu için ihtiyaca göre açılabilir
+        console.log(`[QUERY START] SQL Batch gönderiliyor... (Sorgu uzunluğu: ${mpsSql.length} karakter)`);
 
         const result = await pool.request()
-            .batch(mpsSql); // Çoklu DECLARE/INSERT blokları için .batch() daha güvenlidir
+            .batch(mpsSql); 
 
-        res.json(result.recordset);
+        console.log(`[QUERY SUCCESS] Sorgu tamamlandı. Dönen satır sayısı: ${result.recordset?.length || 0}`);
+
+        if (!result.recordset || result.recordset.length === 0) {
+            console.warn('[MRP WARNING] Sorgu başarılı oldu ama hiç sonuç dönmedi (0 satır).');
+        }
+
+        res.json(result.recordset || []);
     } catch (err) {
-        console.error('MRP Hatası:', err.message);
-        res.status(500).json({ error: err.message });
+        console.error('❌ MRP KRİTİK HATA:', {
+            message: err.message,
+            stack: err.stack,
+            code: err.code
+        });
+        res.status(500).json({ error: 'MRP Sorgu Hatası: ' + err.message });
     }
 });
 
