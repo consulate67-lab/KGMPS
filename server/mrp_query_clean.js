@@ -1,14 +1,13 @@
 /* 
   MRP Analysis Query - Ported from User Snippet
-  Supports dynamic @location parameter
-  Consolidated Declarations to prevent "Must declare table variable" errors
+  Fixed multi-part identifier "si.Bedkod" by ensuring consistent alias usage (su vs si)
 */
 const getMrpQuery = (location) => {
   const loc = location || 'K0001';
   return `
     DECLARE @locationParam nvarchar(50) = '${loc}';
 
-    -- TÜM TABLO DEKLARASYONLARI EN BAŞTA
+    -- DECLARATIONS
     declare @Model_Pd_si Table (  
         xskod varchar(15), xrkod int, xbkod int, xFisno int, xFinx int,
         ModelKod varchar(30), Proses varchar(2), Parcainx int,
@@ -44,7 +43,7 @@ const getMrpQuery = (location) => {
         Miktar3 float, Miktar4 float, HBirim varchar(10)
     );
 
-    -- 1. VERİ TOPLAMA VE İŞLEME BLOKLARI
+    -- 1. INSERT Model_Pd_si (si block)
     insert @Model_Pd_si 
     select si.skod, si.Rkod, si.BedKod, si.FisNo, si.FisHarInx, isnull(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp, null, Null, Null, null, Null, Null, st1.bedkod, st2.bedkod 
     From (siparis_kay sk join siparis_har sh on (sk.SipNo=sh.SipNo) and ((sh.Durum='')or(sh.durum is null)))
@@ -107,7 +106,7 @@ const getMrpQuery = (location) => {
     update pd set b1= (select Bedkod2 From Model_B2B Where (ModelKod=pd.ModelKod Collate turkish_ci_as) and (Proses=pd.Proses Collate turkish_ci_as) and (Parcainx=pd.Parcainx) and (BedKod1=xbKod)) from @Model_Pd_si pd Where (b1 is null) and exists(select Bedkod2 From Model_B2B Where (ModelKod=pd.ModelKod Collate turkish_ci_as) and (Proses=pd.Proses Collate turkish_ci_as) and (Parcainx=pd.Parcainx) and (BedKod1=xbKod));
     update pd set b1= (case when uBedGrp=hBedGrp then xbKod else (select min(bedinx) From Dbo.P_Beden_D dd Where dd.BedKod=hBedGrp) end) from @Model_Pd_si pd Where (b1 is null);
 
-    -- 2. DİĞER TABLO VERİLERİNİ ÇEKME
+    -- 2. INSERT into @urtln
     insert into @urtln select xskod, xrkod, xbkod, xFisNo, xFinx, ModelKod, sum(Mik), sum(Tmik), sum(PMik) from (
         select ii.xskod, ii.xrkod, ii.xbkod, ii.xFisno, ii.xFinx, ii.ModelKod, sum(isNull(xx.Giren,0)-isNull(xx.Cikan,0)) as Mik, 0 as TMik, sum(isNull(xx.Giren,0)-isNull(xx.Cikan,0)) as PMik from (select xskod, xrkod, xbkod, xfisno, xfinx, modelkod from @Model_Pd_si group by xskod, xrkod, xbkod, xfisno, xfinx, modelkod) ii left outer join Urt_plan_gch xx on xx.skod=ii.xskod and xx.rkod=ii.xrkod and xx.bedkod=ii.xbkod and xx.FisNo=ii.xFisNo and xx.Fisharinx=ii.xFinx Group by ii.xskod, ii.xrkod, ii.xbkod, ii.xFisNo, ii.xFinx, ii.ModelKod
         union all select ii.xskod, ii.xrkod, ii.xbkod, ii.xFisno, ii.xFinx, ii.ModelKod, 0 as Mik, sum(isNull(xx.Giren,0)) as TMik, 0 as PMik from (select xskod, xrkod, xbkod, xfisno, xfinx, modelkod from @Model_Pd_si group by xskod, xrkod, xbkod, xfisno, xfinx, modelkod) ii left outer join si_gchar xx on xx.skod=ii.xskod and xx.rkod=ii.xrkod and xx.bedkod=ii.xbkod and xx.FisNo=ii.xFisNo and xx.FisharInx=ii.xFinx Group by ii.xskod, ii.xrkod, ii.xbkod, ii.xFisNo, ii.xFinx, ii.ModelKod
@@ -115,6 +114,7 @@ const getMrpQuery = (location) => {
         union all select skod, rkod, bedkod, FisNo, Fisharinx, em.ModelKod, sum(isNull(Giren,0)) as mik, 0 as TMik, 0 as PMik from UrtX_Em_gch xx left outer join Urtx_Emir em on em.EmirNo=xx.EmirNo Where exists(select fisno from @Model_Pd_si x Where x.xFisNo=xx.FisNo and x.xFinx=xx.FisHarinx and x.xrkod=xx.rkod and x.xbkod=xx.bedkod) Group by skod, rkod, bedkod, FisNo, Fisharinx, em.ModelKod
     ) xx Group by xskod, xrkod, xbkod, xFisNo, xFinx, ModelKod;
 
+    -- 3. INSERT into @Model_Pd (su block) - Fixed si references to su
     insert @Model_Pd 
     select su.skod, su.Rkod, su.BedKod, su.FisNo, su.FisHarinx, isnull(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp, null, Null, Null, null, Null, Null, st1.bedkod, st2.bedkod 
     From (siparis_kay sk join siparis_har sh on (sk.SipNo=sh.SipNo) and ((sh.Durum='')or(sh.durum is null)))
@@ -125,7 +125,7 @@ const getMrpQuery = (location) => {
     Left Outer join StokKart st1 on (st1.SKod=sh.SKod)
     Left Outer Join Model_M MoMa On (MoMa.ModelKod=pd.ModelKod)
     Left Outer Join Dbo.P_RNK_Tip rn1 On (rn1.Renk_kod=su.Rkod)
-    Left Outer Join Dbo.P_Beden_D Bed1 on (Bed1.Bedinx=si.Bedkod) -- si referansı varsa su ile değiştirilmeli
+    Left Outer Join Dbo.P_Beden_D Bed1 on (Bed1.Bedinx=su.Bedkod)
     Left Outer Join StokKart st2 on (st2.SKod=pd.SKod)
     Left Outer Join Dbo.P_RNK_Tip rn2 On (rn2.Renk_kod=(case when not exists(select top 1 1 from s_gchar sgrr where sgrr.skod=su.SKod and sgrr.modul='X' and FisNo=0 and FisHarInx=0 and Location='') then isnull((select rkod from Model_PDS2R s2r Where (s2r.ModelKod=pd.ModelKod) and (s2r.Proses=pd.Proses) and (s2r.Parcainx=pd.Parcainx) and (s2r.skod=su.SKod)), (select top 1 isnull(RKod,0) from s_gchar sghh where (sghh.skod=pd.SKod) and (sghh.BedKod=0) and (sghh.Modul='X') and FisNo=0 and FisHarInx=0 and Location='')) else isnull((select rkod2 From Model_R2R Where (ModelKod=pd.ModelKod Collate turkish_ci_as) and (Proses=pd.Proses Collate turkish_ci_as) and (Parcainx=pd.Parcainx) and (RKod1=su.RKod)), isnull((Select RKod From S_GCHar dx Where (dx.skod=pd.SKod) and (dx.RKod=su.RKod) and (dx.BedKod=0) and (dx.Modul='X') and FisNo=0 and FisHarInx=0 and Location=''), (Select min(isnull(RKod,0)) From S_GCHar gc Where (skod=pd.SKod) and (BedKod=0) and (Modul='X') and FisNo=0 and FisHarInx=0 and Location=''))) end))
     Left Outer Join Dbo.P_Beden_D Bed2 on (Bed2.Bedinx=(case when (isnull(st1.bedkod,'')='') then isnull((select xkod from Model_PDS2X s2x Where (s2x.ModelKod=pd.ModelKod) and (s2x.Proses=pd.Proses) and (s2x.Parcainx=pd.Parcainx) and (s2x.skod=su.SKod)), (select min(bedinx) From Dbo.P_Beden_D dd Where dd.BedKod=st2.bedkod)) else isnull((select Bedkod2 From Model_B2B Where (ModelKod=pd.ModelKod Collate turkish_ci_as) and (Proses=pd.Proses Collate turkish_ci_as) and (Parcainx=pd.Parcainx) and (BedKod1=su.BedKod)), (case when st1.bedkod=st2.bedkod then su.BedKod else (select min(bedinx) From Dbo.P_Beden_D dd Where dd.BedKod=st2.bedkod) end)) end))
@@ -133,7 +133,7 @@ const getMrpQuery = (location) => {
     Where (sk.SipTip='S') and ((isNull(su.giren,0)-isNull(su.cikan,0))>0) AND (sk.SipTur = 'N') AND ((sk.Durum='')or(sk.Durum is Null)) AND ((sh.Durum='')or(sh.durum is null)) AND (sk.Location = @locationParam) and exists(select top 1 1 from Urt_Plan_Model upmxx Where upmxx.sipno=su.fisno and upmxx.sipharinx=su.fisharinx and upmxx.activid=0)
     Group by su.skod, su.Rkod, su.BedKod, su.FisNo, su.FisHarinx, isnull(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp, st1.bedkod, st2.bedkod;
 
-    -- 3. ANA TABLOYA AKTARIM
+    -- 4. FINAL INSERT into @TableHamGroup (si block)
     insert INTO @TableHamGroup 
     select 0 as EmirNo, MoMa.ModelKod, pd.Proses, st1.skod as uskod, st1.Tanim as USKod_Tanim, isnull(upo.HSKod,pd.skod) as hskod, st2.Tanim as HSKod_Tanim, sk.SipTar, sk.TeslimTar, sh.TerminTarihi, sh.Tanim, sk.SipNo as Siparis_No, sk.CariKod, cr.CName as CariKod_Tanim, sk.BelgeNo as BelgeNo, st1.GrupKod as GrupKod, st1.StokTip as StokTip, si.RKod as URKod, rn1.Tanim as URKod_Tanim, bed1.bedinx as ubedkod, Bed1.Beden as UBeden, st2.StokSekli as StokSekli, st2.GrupKod as GrupKod, st2.StokTip as StokTip, st2.BEDKod as BEDKod, isnull(rn2.Renk_kod,0) as HRKod, isnull(rn2.Tanim,'') as HRKod_Tanim, Bed2.Bedinx as HBedKod, Bed2.Beden as HBeden, Sum(isnull(upo.HMiktar,isnull(fn_ModelHamMik.Sonuc,0))*isnull(fn_SiparisMik.Sonuc,0)) as Miktar1, 0 as Miktar2, 0 as Miktar3, 0 as Miktar4, isnull(upo.HBirim,pd.Birim) as HBirim 
     From (siparis_kay sk join siparis_har sh on (sk.SipNo=sh.SipNo) and ((sh.Durum='')or(sh.durum is null)))
@@ -155,7 +155,7 @@ const getMrpQuery = (location) => {
     Where (sk.SipTip='S') and (isnull(upo.HEvent,'')<>'-') and (xxxx.FisNo is not null) and ((isnull(si.giren,0)-isnull(si.cikan,0)-isNull(xxxx.Mik,0))>0) AND (sk.SipTur = 'N') AND ((sk.Durum='')or(sk.Durum is Null)) AND ((sh.Durum='')or(sh.durum is null)) AND (sk.Location = @locationParam)
     Group by MoMa.ModelKod, pd.Proses, st1.skod, st1.Tanim, isnull(upo.HSKod,pd.skod), st2.Tanim, sk.SipTar, sk.TeslimTar, sh.TerminTarihi, sh.Tanim, sk.SipNo, sk.CariKod, cr.CName, sk.BelgeNo, st1.GrupKod, st1.StokTip, si.RKod, rn1.Tanim, bed1.bedinx, Bed1.Beden, st2.StokSekli, st2.GrupKod, st2.StokTip, st2.BEDKod, isnull(rn2.Renk_kod,0), isnull(rn2.Tanim,''), Bed2.Bedinx, Bed2.Beden, (isnull(upo.HBirim,pd.Birim));
 
-    -- SONUÇ
+    -- FINAL OUTPUT
     Select * from @TableHamGroup;
   `;
 };
