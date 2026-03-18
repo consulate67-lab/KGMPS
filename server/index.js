@@ -457,9 +457,13 @@ app.get('/api/production/mrp', async (req, res) => {
         const pool = await getTenantPool(decoded.tenantId);
 
         const mpsSql = getMrpQuery(location || 'K0001');
+        
+        // DEBUG: Sorguyu konsola yazdır
+        console.log(`[${new Date().toISOString()}] MRP Sorgusu Başlatılıyor. Lokasyon: ${location || 'K0001'}`);
+        // console.log('Sorgu Metni:', mpsSql); // Çok uzun olduğu için ihtiyaca göre açılabilir
 
         const result = await pool.request()
-            .query(mpsSql);
+            .batch(mpsSql); // Çoklu DECLARE/INSERT blokları için .batch() daha güvenlidir
 
         res.json(result.recordset);
     } catch (err) {
