@@ -396,7 +396,8 @@ app.get('/api/locations', async (req, res) => {
         tenantId = decoded.tenantId;
         const pool = await getTenantPool(tenantId);
         // Projenin ERP yapısına uygun olarak lokasyon tablosu si_lok olarak güncellendi
-        const result = await pool.request().query('SELECT location as id, LName as name FROM location ORDER BY Location');
+        // Kullanıcı talebi: LName (isim) yerine location (id/kod) alanını kullan
+        const result = await pool.request().query('SELECT location as id, location as name FROM location ORDER BY Location');
         res.json(result.recordset);
     } catch (err) {
         console.error('❌ Lokasyon listesi hatası (Detailed):', {
