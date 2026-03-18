@@ -455,6 +455,9 @@ app.get('/api/production/mrp', async (req, res) => {
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
         const pool = await getTenantPool(decoded.tenantId);
+        
+        // Bağlantı detaylarını logla (Güvenlik için şifreyi gizleyelim)
+        console.log(`[DB INFO] Bağlanılan Sunucu: ${pool.config.server}, Veritabanı: ${pool.config.database}, Kullanıcı: ${pool.config.user}`);
 
         const mpsSql = getMrpQuery(location || 'K0001');
         

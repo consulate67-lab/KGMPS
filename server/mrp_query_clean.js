@@ -149,10 +149,10 @@ const getMrpQuery = (location) => {
     Left Outer Join StokKart st2 on (st2.SKod=isnull(upo.hskod,pd.SKod))
     Left Outer Join Dbo.P_RNK_Tip rn2 On (rn2.Renk_kod=isnull(upo.hrkod, (isnull(pd.r1, isnull(pd.r2, pd.r3)))))
     Left Outer Join Dbo.P_Beden_D Bed2 On (Bed2.Bedinx=isnull(upo.hbedkod, (isnull(pd.b1, isnull(pd.b2, pd.b3)))))
-    CROSS APPLY dbo.kg_ifn_GetConvStkMik(si.skod,isnull(si.giren,0)-isnull(si.cikan,0)-isnull(xxxx.mik,0) ,sh.Birim,st1.Birim ) as fn_SiparisMik
-    CROSS APPLY dbo.kg_ifn_Model_HamMik (si.skod,si.rkod,si.BedKod,pd.ModelKod,pd.Proses,pd.Parcainx,sk.Sipno,sh.Sipharinx,isnull(upo.Activid,0)) as fn_ModelHamMik
+    OUTER APPLY dbo.kg_ifn_GetConvStkMik(si.skod,isnull(si.giren,0)-isnull(si.cikan,0)-isnull(xxxx.mik,0) ,sh.Birim,st1.Birim ) as fn_SiparisMik
+    OUTER APPLY dbo.kg_ifn_Model_HamMik (si.skod,si.rkod,si.BedKod,pd.ModelKod,pd.Proses,pd.Parcainx,sk.Sipno,sh.Sipharinx,isnull(upo.Activid,0)) as fn_ModelHamMik
     Left Outer Join Cari_Kart cr on (cr.CKod=sk.CariKod)
-    Where (sk.SipTip='S') and (isnull(upo.HEvent,'')<>'-') and (xxxx.FisNo is not null) and ((isnull(si.giren,0)-isnull(si.cikan,0)-isNull(xxxx.Mik,0))>0) AND (sk.SipTur = 'N') AND ((sk.Durum='')or(sk.Durum is Null)) AND ((sh.Durum='')or(sh.durum is null)) AND (sk.Location = @locationParam)
+    Where (sk.SipTip='S') and (isnull(upo.HEvent,'')<>'-') and (xxxx.FisNo is not null) AND (sk.SipTur = 'N') AND ((sk.Durum='')or(sk.Durum is Null)) AND ((sh.Durum='')or(sh.durum is null)) AND (sk.Location = @locationParam)
     Group by MoMa.ModelKod, pd.Proses, st1.skod, st1.Tanim, isnull(upo.HSKod,pd.skod), st2.Tanim, sk.SipTar, sk.TeslimTar, sh.TerminTarihi, sh.Tanim, sk.SipNo, sk.CariKod, cr.CName, sk.BelgeNo, st1.GrupKod, st1.StokTip, si.RKod, rn1.Tanim, bed1.bedinx, Bed1.Beden, st2.StokSekli, st2.GrupKod, st2.StokTip, st2.BEDKod, isnull(rn2.Renk_kod,0), isnull(rn2.Tanim,''), Bed2.Bedinx, Bed2.Beden, (isnull(upo.HBirim,pd.Birim));
 
     -- FINAL OUTPUT
