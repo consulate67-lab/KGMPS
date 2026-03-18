@@ -408,6 +408,43 @@ app.get('/api/locations', async (req, res) => {
     }
 });
 
+import getMrpQuery from './mrp_query_clean.js';
+
+// Production Orders for Planning
+app.get('/api/production/orders', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).send('Yetkisiz.');
+
+    try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
+        const pool = await getTenantPool(decoded.tenantId);
+
+        // Canlı üretim emirlerini ve detaylarını çekelim
+        const result = await pool.request().query(`
+            SELECT TOP 50
+                ue.EmirNo as id,
+                ue.EmirNo as workOrderNo,
+                ue.ModelKod as productName,
+                'M1' as machineId, -- Şimdilik varsayılan makine
+                DATEADD(hour, 8, CAST(CAST(GETDATE() AS DATE) AS DATETIME)) as startTime,
+                DATEADD(hour, 12, CAST(CAST(GETDATE() AS DATE) AS DATETIME)) as endTime,
+                isNull(ue.Goz, 1) as cavityCount,
+                isNull(ue.Cevrim, 30) as cycleTime,
+                30 as setupTime,
+                isNull(ue.Miktar, 0) as orderQty,
+                45 as progress,
+                '#4facfe' as color
+            FROM Urt_Emir ue
+            ORDER BY ue.Ins_Date DESC
+        `);
+
+        res.json(result.recordset);
+    } catch (err) {
+        console.error('Orders Hatası:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Master Production Schedule & MRP Optimization
 app.get('/api/production/mrp', async (req, res) => {
     const authHeader = req.headers.authorization;
@@ -419,57 +456,14 @@ app.get('/api/production/mrp', async (req, res) => {
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
         const pool = await getTenantPool(decoded.tenantId);
 
-        const mpsSql = `
-            DECLARE @Loc nvarchar(20) = @location;
-            WITH PurchaseTermins AS (
-                SELECT 
-                    sh.SKod, sh.RKod, sh.BedKod,
-                    MIN(sh.TerminTarihi) as EnYakinTermin,
-                    SUM(isNull(sh.Miktar,0) - isNull(sh.SevkMiktar,0)) as BekleyenMik
-                FROM siparis_kay sk
-                JOIN siparis_har sh ON sk.SipNo = sh.SipNo
-                WHERE sk.SipTip = 'A' 
-                  AND sk.Location = @Loc
-                  AND (sh.Durum = '' OR sh.Durum IS NULL)
-                  AND (sh.Miktar > isNull(sh.SevkMiktar,0))
-                GROUP BY sh.SKod, sh.RKod, sh.BedKod
-            ),
-            CurrentStock AS (
-                SELECT 
-                    SKod, RKod, BedKod,
-                    SUM(isNull(Giren,0) - isNull(Cikan,0)) as NetStok
-                FROM si_gchar
-                WHERE Location = @Loc
-                GROUP BY SKod, RKod, BedKod
-            )
-            SELECT 
-                sk.SipNo, sh.SipHarinx, sk.CariKod, cr.CName as Musteri,
-                sh.SKod as UrunKod, st1.Tanim as UrunAd,
-                pd.SKod as HamKod, st2.Tanim as HamAd,
-                pd.Miktar * (sh.Miktar - isNull(sh.SevkMiktar,0)) as GerekenMik,
-                isNull(cs.NetStok, 0) as HamStok,
-                pt.EnYakinTermin as TedarikTarihi,
-                pt.BekleyenMik as YoldakiMik
-            FROM siparis_kay sk
-            JOIN siparis_har sh ON sk.SipNo = sh.SipNo
-            JOIN model_PD pd ON sh.SKod = pd.ModelKod 
-            LEFT JOIN StokKart st1 ON sh.SKod = st1.SKod
-            LEFT JOIN StokKart st2 ON pd.SKod = st2.SKod
-            LEFT JOIN Cari_Kart cr ON sk.CariKod = cr.CKod
-            LEFT JOIN PurchaseTermins pt ON pd.SKod = pt.SKod
-            LEFT JOIN CurrentStock cs ON pd.SKod = cs.SKod
-            WHERE sk.SipTip = 'S' 
-              AND sk.Location = @Loc
-              AND (sh.Durum = '' OR sh.Durum IS NULL)
-              AND (sh.Miktar > isNull(sh.SevkMiktar,0))
-        `;
+        const mpsSql = getMrpQuery(location || 'K0001');
 
         const result = await pool.request()
-            .input('location', mssql.NVarChar, location)
             .query(mpsSql);
 
         res.json(result.recordset);
     } catch (err) {
+        console.error('MRP Hatası:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

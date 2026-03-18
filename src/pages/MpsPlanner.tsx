@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import { 
   History, Save, ArrowLeft, 
   ChevronLeft, ChevronRight, RefreshCw,
@@ -54,37 +55,7 @@ const INJECTION_MACHINES: Machine[] = [
   { id: 'M5', name: 'MONTAJ-01', type: 'Assembly', status: 'Working' },
 ];
 
-const INITIAL_ORDERS: ProductionOrder[] = [
-  { 
-    id: '1', workOrderNo: 'EM-5001', productName: 'CABANI-Base-XL', 
-    machineId: 'M1', startTime: '2026-03-17T08:00:00', endTime: '2026-03-17T12:00:00',
-    cavityCount: 4, cycleTime: 45, setupTime: 30, orderQty: 1200,
-    progress: 45, color: '#00f2fe',
-    materials: [
-      { id: 'H1', name: 'PVC-White-01', required: 450, stock: 1200 },
-      { id: 'H2', name: 'PVC-Clear-05', required: 50, stock: 20, procurementDate: '2026-03-20', incomingQty: 100 }
-    ]
-  },
-  { 
-    id: '2', workOrderNo: 'EM-5002', productName: 'CABANI-Sport-Sole', 
-    machineId: 'M2', startTime: '2026-03-17T09:30:00', endTime: '2026-03-17T14:30:00',
-    cavityCount: 2, cycleTime: 60, setupTime: 45, orderQty: 300,
-    progress: 15, color: '#f093fb',
-    materials: [
-      { id: 'H1', name: 'TPU-Red-A', required: 200, stock: 500 },
-      { id: 'H2', name: 'Adhesive-X', required: 10, stock: 100 }
-    ]
-  },
-  { 
-    id: '3', workOrderNo: 'EM-5045', productName: 'Heel-Support-S3', 
-    machineId: 'M1', startTime: '2026-03-17T12:30:00', endTime: '2026-03-17T18:00:00',
-    cavityCount: 8, cycleTime: 30, setupTime: 20, orderQty: 5000,
-    progress: 0, color: '#4facfe',
-    materials: [
-      { id: 'H1', name: 'PP-Grey-Base', required: 600, stock: 100, procurementDate: '2026-03-18', incomingQty: 1000 }
-    ]
-  }
-];
+
 
 const REVISION_HISTORY: RevisionLog[] = [
   { id: 1, userName: 'selimkorgun', action: 'Drag-Drop', timestamp: '12:45', details: 'EM-5001 M1 -> M2 makinesine taşındı.' },
@@ -195,15 +166,42 @@ const MachineRow = ({
 };
 
 const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number | null }) => {
-  const [orders, setOrders] = useState<ProductionOrder[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<ProductionOrder[]>([]);
+  const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [scale, setScale] = useState(100);
 
   // Gantt ekranı artık sadece planlama odaklı, hammadde analizi ANALYSIS ekranında.
+  const isLocal = window.location.hostname === 'localhost';
+  const isGithub = window.location.hostname.includes('github.io');
+  const apiBase = (isLocal || isGithub) ? 'https://kgmps-production.up.railway.app' : window.location.origin;
+
+  const fetchOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`${apiBase}/api/production/orders`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Backend'den gelen veriyi interface'e uygun hale getirelim (Gerekirse)
+      const mapped = res.data.map((o: any) => ({
+        ...o,
+        id: String(o.id),
+        materials: [] // Gelecekte detaylı malzeme eklenebilir
+      }));
+      setOrders(mapped);
+    } catch (err) {
+      console.error('Orders fetch hatası:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [apiBase]);
+
   useEffect(() => {
+    fetchOrders();
     console.log(`Planner session for tenant: ${tenantId}`);
-  }, [tenantId]);
+  }, [tenantId, fetchOrders]);
 
   const calculateAndUpdateDuration = (order: ProductionOrder, updates: Partial<ProductionOrder>) => {
     const updated = { ...order, ...updates };
@@ -267,7 +265,12 @@ const MpsPlanner = ({ onBack, tenantId }: { onBack: () => void, tenantId: number
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', padding: '0 15px 15px 15px', position: 'relative' }}>
         <div className="glass-card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
+          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', position: 'relative' }}>
+            {loading && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
+                <RefreshCw className="animate-spin" color="#4facfe" size={32} />
+              </div>
+            )}
             <div style={{ minWidth: `${180 + (hours.length * 100)}px` }}>
               <TimeHeader hours={hours} />
               {INJECTION_MACHINES.map(m => (

@@ -12,15 +12,18 @@ interface Location {
 }
 
 interface MrpItem {
-  SipNo: string;
-  SipHarinx: number;
-  UrunAd: string;
-  HamKod: string;
-  HamAd: string;
-  GerekenMik: number;
-  HamStok: number;
-  TedarikTarihi: string | null;
-  YoldakiMik: number;
+  Siparis_No: string | number;
+  USKod_Tanim: string;
+  uskod: string;
+  hskod: string;
+  HSKod_Tanim: string;
+  Miktar1: number; // Gerçek Sipariş İhtiyacı
+  Miktar2: number; // Planlanan İhtiyaç
+  Miktar3: number; // Emir İhtiyacı
+  Miktar4: number; // Devam Eden
+  MiktarTop: number; // Toplam İhtiyaç
+  Siparis_Miktar: number; // Mevcut Stok/Durum
+  HBirim: string;
 }
 
 interface MaterialAnalysisProps {
@@ -62,21 +65,16 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
     try {
       const res = await axios.get(url, {
         headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
+          'Authorization': `Bearer ${token}`
         }
       });
-      console.log(`[DEBUG] Başarılı! Lokasyonlar:`, res.data);
       setLocations(res.data);
       if (res.data.length > 0) {
-        setMrpLocation(res.data[0].name);
-        setMarketingLocation(res.data[0].name);
+        setMrpLocation(res.data[0].id); // ID (K0001 vb) gönderelim
+        setMarketingLocation(res.data[0].id);
       }
     } catch (err: any) {
-      console.error(`[DEBUG] İstek HATASI:`, err.response || err);
-      const serverError = err.response?.data?.error || err.message;
-      const hostMsg = window.location.hostname.includes('github.io') ? " (GitHub Pages -> Railway)" : "";
-      setError(`Sunucu Hatası: ${serverError}${hostMsg}`);
+      setError(`Lokasyonlar yüklenemedi: ${err.message}`);
     }
   };
 
@@ -96,16 +94,19 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
     } finally {
       setLoading(false);
     }
-  }, [mrpLocation]);
+  }, [mrpLocation, apiBase]);
 
   useEffect(() => { fetchLocations(); }, []);
   useEffect(() => { if (mrpLocation) fetchMrpAnalysis(); }, [mrpLocation, fetchMrpAnalysis]);
 
   const processedData = useMemo(() => {
     const filtered = mrpData.filter(item => {
-      const matchesSearch = item.HamAd.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           item.SipNo.toLowerCase().includes(searchTerm.toLowerCase());
-      const isCritical = item.HamStok < item.GerekenMik;
+      const name = item.HSKod_Tanim || '';
+      const order = String(item.Siparis_No) || '';
+      const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           order.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const isCritical = (0) < item.MiktarTop; // Geçici olarak stock=0 varsayıyoruz
       if (filterStatus === 'CRITICAL') return matchesSearch && isCritical;
       if (filterStatus === 'OK') return matchesSearch && !isCritical;
       return matchesSearch;
@@ -114,15 +115,17 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
     if (groupBy === 'ORDER') {
       const groups: Record<string, { orderNo: string, productName: string, items: MrpItem[] }> = {};
       filtered.forEach(item => {
-        if (!groups[item.SipNo]) groups[item.SipNo] = { orderNo: item.SipNo, productName: item.UrunAd, items: [] };
-        groups[item.SipNo].items.push(item);
+        const key = String(item.Siparis_No);
+        if (!groups[key]) groups[key] = { orderNo: key, productName: item.USKod_Tanim, items: [] };
+        groups[key].items.push(item);
       });
       return Object.values(groups);
     } else {
       const groups: Record<string, { matCode: string, matName: string, items: MrpItem[] }> = {};
       filtered.forEach(item => {
-        if (!groups[item.HamKod]) groups[item.HamKod] = { matCode: item.HamKod, matName: item.HamAd, items: [] };
-        groups[item.HamKod].items.push(item);
+        const key = item.hskod;
+        if (!groups[key]) groups[key] = { matCode: key, matName: item.HSKod_Tanim, items: [] };
+        groups[key].items.push(item);
       });
       return Object.values(groups);
     }
@@ -130,9 +133,9 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
 
   const stats = {
     totalItems: mrpData.length,
-    criticalCount: mrpData.filter(i => i.HamStok < i.GerekenMik).length,
-    okCount: mrpData.filter(i => i.HamStok >= i.GerekenMik).length,
-    totalShortage: mrpData.reduce((acc, i) => acc + (i.HamStok < i.GerekenMik ? (i.GerekenMik - i.HamStok) : 0), 0)
+    criticalCount: mrpData.filter(i => (0) < i.MiktarTop).length,
+    okCount: mrpData.filter(i => (0) >= i.MiktarTop).length,
+    totalShortage: mrpData.reduce((acc, i) => acc + i.MiktarTop, 0)
   };
 
   return (
@@ -230,25 +233,37 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = ({ tenantId: _tenantId
                         <thead>
                           <tr>
                             <th>Hammadde / Bileşen</th>
-                            <th>Gereken</th>
+                            <th>Sipariş</th>
+                            <th>Planlanan</th>
+                            <th>Emir</th>
+                            <th>D.Eden</th>
+                            <th>Top.İht</th>
                             <th>Stok</th>
-                            <th>Açık Mik.</th>
+                            <th>Açık</th>
                             <th>Durum</th>
                           </tr>
                         </thead>
                         <tbody>
                           {group.items.map((item: MrpItem, iIdx: number) => {
-                            const isShortage = item.HamStok < item.GerekenMik;
+                            const stock = 0; // SQL çıktısında stok kolonu bulunamadığı için geçici olarak 0
+                            const needed = item.MiktarTop || 0;
+                            const isShortage = stock < needed;
+                            const diff = isShortage ? (needed - stock) : 0;
+                            
                             return (
                               <tr key={iIdx}>
                                 <td>
-                                  <div style={{ fontWeight: '600' }}>{item.HamAd}</div>
-                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>{item.HamKod}</div>
+                                  <div style={{ fontWeight: '600' }}>{item.HSKod_Tanim}</div>
+                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>{item.hskod}</div>
                                 </td>
-                                <td>{item.GerekenMik.toLocaleString()}</td>
-                                <td>{item.HamStok.toLocaleString()}</td>
+                                <td>{item.Miktar1?.toLocaleString()}</td>
+                                <td>{item.Miktar2?.toLocaleString()}</td>
+                                <td>{item.Miktar3?.toLocaleString()}</td>
+                                <td>{item.Miktar4?.toLocaleString()}</td>
+                                <td style={{fontWeight: '700'}}>{needed.toLocaleString()}</td>
+                                <td style={{color: '#10b981', fontWeight: '600'}}>{stock.toLocaleString()}</td>
                                 <td style={{ color: isShortage ? '#dc2626' : 'inherit', fontWeight: isShortage ? '700' : 'normal' }}>
-                                  {isShortage ? (item.GerekenMik - item.HamStok).toLocaleString() : '0'}
+                                  {diff.toLocaleString()}
                                 </td>
                                 <td>
                                   <span className={`pro-badge ${isShortage ? 'pro-badge-error' : 'pro-badge-success'}`}>
