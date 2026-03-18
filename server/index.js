@@ -453,6 +453,7 @@ app.get('/api/production/mrp', async (req, res) => {
     const { location } = req.query;
 
     try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
         console.log(`[MRP DEBUG] İstek Alındı. Lokasyon: ${location}, Tenant: ${decoded.tenantId}`);
         const pool = await getTenantPool(decoded.tenantId);
         
