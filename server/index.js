@@ -483,6 +483,23 @@ app.get('/api/production/mrp', async (req, res) => {
     }
 });
 
+// TEST: Veritabanı Bağlantı Testi
+app.get('/api/test-db', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).send('Yetkisiz.');
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
+        const pool = await getTenantPool(decoded.tenantId);
+        
+        console.log(`[TEST-DB] Bağlantı başarılı. Sunucu: ${pool.config.server}`);
+        const result = await pool.request().query('SELECT @@VERSION as version, DB_NAME() as db');
+        res.json(result.recordset[0] || { status: 'Bağlantı Var Ama Sonuç Yok' });
+    } catch (err) {
+        console.error('❌ TEST-DB HATASI:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // React SPA Catch-all (Express 5 ve Bulut Uyumlu En Güvenli Yöntem)
 // Hiçbir rotaya uymayan tüm istekleri index.html'e yönlendirir.
 app.use((req, res) => {
