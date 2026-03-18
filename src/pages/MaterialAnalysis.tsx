@@ -94,7 +94,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
   useEffect(() => { fetchLocations(); }, []);
   useEffect(() => { fetchMrpAnalysis(); }, [fetchMrpAnalysis]);
 
-  // JS Tarafında Dinamik Gruplama
+  // JS Tarafında Dinamik Gruplama (Bedenleri Renk Altında Toplar)
   const processedData = useMemo(() => {
     if (groupingMode === 'SIZE') return mrpData;
 
@@ -105,12 +105,14 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
       const key = `${item.hskod}_${item.HRKod_Tanim}`;
       if (groupedMap.has(key)) {
         const existing = groupedMap.get(key)!;
-        existing.Miktar1 += item.Miktar1;
-        existing.Miktar2 += item.Miktar2;
-        existing.Miktar3 += item.Miktar3;
-        existing.Miktar4 += item.Miktar4;
-        existing.MiktarTop += item.MiktarTop;
+        // Tüm bedenlerdeki hammadde stok ve ihtiyaç rakamlarını topluyoruz
+        existing.Miktar1 = (existing.Miktar1 || 0) + (item.Miktar1 || 0);
+        existing.Miktar2 = (existing.Miktar2 || 0) + (item.Miktar2 || 0);
+        existing.Miktar3 = (existing.Miktar3 || 0) + (item.Miktar3 || 0);
+        existing.Miktar4 = (existing.Miktar4 || 0) + (item.Miktar4 || 0);
+        existing.MiktarTop = (existing.MiktarTop || 0) + (item.MiktarTop || 0);
       } else {
+        // Yeni grup oluştur: Bedeni temizleyip kopya alıyoruz
         groupedMap.set(key, { ...item, HBeden: '-' });
       }
     });
