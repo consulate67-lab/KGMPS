@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
   RefreshCw, Search, Boxes, AlertCircle, Settings2, 
@@ -15,9 +15,10 @@ interface MrpItem {
   hskod: string;
   HSKod_Tanim: string;
   HRKod_Tanim: string;
+  HBeden: string;
   HBirim: string;
   Miktar1: number; // Gerçek Sipariş İhtiyacı
-  Miktar2: number; // Planlanan İhtiyaç
+  Miktar2: number; // Planlanan İhtiyacı
   Miktar3: number; // Emir İhtiyacı
   Miktar4: number; // Devam Eden
   MiktarTop: number; // Toplam İhtiyaç
@@ -27,10 +28,13 @@ interface MaterialAnalysisProps {
   tenantId: number | null;
 }
 
+type GroupingMode = 'COLOR' | 'SIZE';
+
 const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
   const [loading, setLoading] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [groupingMode, setGroupingMode] = useState<GroupingMode>('COLOR');
   
   // Kalıcı Ayarlar (LocalStorage)
   const [prodLocs, setProdLocs] = useState<string[]>(() => {
@@ -90,6 +94,35 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
   useEffect(() => { fetchLocations(); }, []);
   useEffect(() => { fetchMrpAnalysis(); }, [fetchMrpAnalysis]);
 
+  // JS Tarafında Dinamik Gruplama
+  const processedData = useMemo(() => {
+    if (groupingMode === 'SIZE') return mrpData;
+
+    // Renk Bazlı Gruplama Mantığı
+    const groupedMap = new Map<string, MrpItem>();
+    
+    mrpData.forEach(item => {
+      const key = `${item.hskod}_${item.HRKod_Tanim}`;
+      if (groupedMap.has(key)) {
+        const existing = groupedMap.get(key)!;
+        existing.Miktar1 += item.Miktar1;
+        existing.Miktar2 += item.Miktar2;
+        existing.Miktar3 += item.Miktar3;
+        existing.Miktar4 += item.Miktar4;
+        existing.MiktarTop += item.MiktarTop;
+      } else {
+        groupedMap.set(key, { ...item, HBeden: '-' });
+      }
+    });
+
+    return Array.from(groupedMap.values());
+  }, [mrpData, groupingMode]);
+
+  const filteredData = processedData.filter(item => 
+    item.hskod?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.HSKod_Tanim?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   // Ayarları Kaydet
   const saveSettings = () => {
     localStorage.setItem('mrp_prod_locs', prodLocs.join(','));
@@ -105,11 +138,6 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
       setter([...list, id]);
     }
   };
-
-  const filteredData = mrpData.filter(item => 
-    item.hskod?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.HSKod_Tanim?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="min-h-screen bg-[#0a0f18] text-slate-200 font-sans selection:bg-blue-500/30">
@@ -129,6 +157,22 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Gruplama Toggle Seçeneği */}
+          <div className="flex bg-white/5 p-1 rounded-xl border border-white/5 mr-2">
+            <button 
+              onClick={() => setGroupingMode('COLOR')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${groupingMode === 'COLOR' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              RENK BAZLI
+            </button>
+            <button 
+              onClick={() => setGroupingMode('SIZE')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${groupingMode === 'SIZE' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              BEDEN BAZLI
+            </button>
+          </div>
+
           <button 
             onClick={() => setShowSettings(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-semibold transition-all group"
@@ -181,6 +225,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
               <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-slate-500 font-bold border-b border-white/5">
                 <tr>
                   <th className="px-6 py-4">Hammadde & Renk</th>
+                  {groupingMode === 'SIZE' && <th className="px-6 py-4">Beden</th>}
                   <th className="px-6 py-4">Birim</th>
                   <th className="px-6 py-4 text-center">Sipariş İhtiyacı</th>
                   <th className="px-6 py-4 text-center">Planlanan İhtiyaç</th>
@@ -192,7 +237,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
               <tbody className="divide-y divide-white/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-20 text-center">
+                    <td colSpan={groupingMode === 'SIZE' ? 8 : 7} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center gap-4">
                         <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
                         <p className="text-sm text-slate-400 font-medium">Veriler Hesaplanıyor...</p>
@@ -201,7 +246,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-20 text-center text-slate-500 italic">
+                    <td colSpan={groupingMode === 'SIZE' ? 8 : 7} className="px-6 py-20 text-center text-slate-500 italic">
                       <div className="flex flex-col items-center gap-2">
                         <AlertCircle size={32} className="opacity-20 mb-2" />
                         Veri Bulunamadı
@@ -224,6 +269,13 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                         </span>
                       </div>
                     </td>
+                    {groupingMode === 'SIZE' && (
+                       <td className="px-6 py-4">
+                        <span className="text-[10px] px-2 py-0.5 bg-indigo-500/20 border border-indigo-500/20 text-indigo-300 rounded-lg font-bold">
+                          {item.HBeden}
+                        </span>
+                      </td>
+                    )}
                     <td className="px-6 py-4">
                       <span className="text-[10px] px-2 py-0.5 bg-white/5 border border-white/10 rounded-full font-bold">
                         {item.HBirim}
