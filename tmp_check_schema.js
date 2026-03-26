@@ -16,13 +16,9 @@ async function checkSchema() {
 
     try {
         let pool = await sql.connect(config);
-        console.log("--- SIPARIS_KAY COLUMNS ---");
-        let res1 = await pool.request().query("SELECT TOP 1 * FROM siparis_kay");
-        console.log(Object.keys(res1.recordset[0]));
-
-        console.log("--- SIPARIS_HAR COLUMNS ---");
-        let res2 = await pool.request().query("SELECT TOP 1 * FROM siparis_har");
-        console.log(Object.keys(res2.recordset[0]));
+        console.log("--- MODEL_PD COLUMNS ---");
+        let res4 = await pool.request().query("SELECT TOP 1 * FROM model_PD");
+        console.log(Object.keys(res4.recordset[0]));
 
         process.exit(0);
     } catch (err) {
