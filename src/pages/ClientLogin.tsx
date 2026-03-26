@@ -13,7 +13,10 @@ const ClientLogin: React.FC<ClientLoginProps> = ({ onLogin, onAdminSwitch }) => 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [firms, setFirms] = useState<{id: number, name: string}[]>([]);
-  const apiBase = 'https://kgmps-production.up.railway.app';
+  
+  const apiBase = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:5000'
+    : 'https://kgmps-production.up.railway.app';
 
   useEffect(() => {
     const fetchFirms = async () => {

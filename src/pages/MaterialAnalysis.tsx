@@ -50,6 +50,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
   const [mrpData, setMrpData] = useState<MrpItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [mrpDebug, setMrpDebug] = useState<any>(null);
 
   const isLocal = window.location.hostname === 'localhost';
   const apiBase = isLocal ? 'http://localhost:5000' : 'https://kgmps-production.up.railway.app';
@@ -83,7 +84,9 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
         },
         headers: { Authorization: `Bearer ${token}` }
       });
-      setMrpData(res.data);
+      console.log('--- MRP ANALYSIS DEBUG ---', res.data.debug);
+      setMrpData(res.data.data || []);
+      setMrpDebug(res.data.debug);
     } catch (err: any) {
       setError(`MRP verisi çekilemedi: ${err.response?.data?.error || err.message}`);
     } finally {
@@ -302,6 +305,14 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
             <AlertCircle size={18} />
             {error}
           </div>
+        )}
+
+        {mrpDebug && (
+           <div className="mt-4 text-[10px] text-slate-600 flex gap-4 justify-end">
+              <span>DB: {mrpDebug.db}</span>
+              <span>Server: {mrpDebug.server}</span>
+              <span>Rows: {mrpDebug.rowCount}</span>
+           </div>
         )}
       </main>
 

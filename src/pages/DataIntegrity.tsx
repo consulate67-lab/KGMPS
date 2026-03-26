@@ -27,7 +27,9 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
   const [selectedProses, setSelectedProses] = useState<string>('all');
   const [debugInfo, setDebugInfo] = useState<any>(null);
 
-  const apiBase = 'https://kgmps-production.up.railway.app';
+  const apiBase = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:5000'
+    : 'https://kgmps-production.up.railway.app';
 
   const fetchIssues = async () => {
     setLoading(true);

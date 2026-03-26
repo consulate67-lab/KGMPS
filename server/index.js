@@ -470,18 +470,26 @@ app.get('/api/production/mrp', async (req, res) => {
 
         console.log(`[QUERY SUCCESS] Sorgu tamamlandı. Dönen satır sayısı: ${result.recordset?.length || 0}`);
 
-        if (!result.recordset || result.recordset.length === 0) {
-            console.warn('[MRP WARNING] Sorgu başarılı oldu ama hiç sonuç dönmedi (0 satır).');
-        }
-
-        res.json(result.recordset || []);
+        res.json({
+            data: result.recordset || [],
+            debug: {
+                prodLocs,
+                rawLocs,
+                db: pool.config.database,
+                server: pool.config.server,
+                rowCount: result.recordset?.length || 0
+            }
+        });
     } catch (err) {
         console.error('❌ MRP KRİTİK HATA:', {
             message: err.message,
             stack: err.stack,
             code: err.code
         });
-        res.status(500).json({ error: 'MRP Sorgu Hatası: ' + err.message });
+        res.status(500).json({ 
+            error: 'MRP Sorgu Hatası: ' + err.message,
+            debug: { error: err.message, stack: err.stack }
+        });
     }
 });
 
