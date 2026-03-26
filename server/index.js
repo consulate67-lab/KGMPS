@@ -526,10 +526,20 @@ app.get('/api/production/pre-checks', async (req, res) => {
         }
 
         const result = await pool.request().query(sql);
-        res.json(result.recordset);
+        
+        // Diagnostik bilgi ekle (Hangi veritabanına sorgu atıldığını gör)
+        res.json({
+            data: result.recordset || [],
+            debug: {
+                db: pool.config.database,
+                server: pool.config.server,
+                tenantId: decoded.tenantId,
+                check: checkType
+            }
+        });
     } catch (err) {
         console.error('Pre-Check Hatası:', err.message);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message, debug: { error: err.message } });
     }
 });
 

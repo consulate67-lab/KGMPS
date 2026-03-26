@@ -24,16 +24,21 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
   const [loading, setLoading] = useState(false);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+
+  const apiBase = 'https://kgmps-production.up.railway.app';
 
   const fetchIssues = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/production/pre-checks?checkType=${activeSubTab}`, {
+      const response = await fetch(`${apiBase}/api/production/pre-checks?checkType=${activeSubTab}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await response.json();
-      setIssues(data);
+      const result = await response.json();
+      console.log('--- DATA INTEGRITY DEBUG ---', result.debug);
+      setIssues(result.data || []);
+      setDebugInfo(result.debug);
     } catch (err) {
       console.error('Veri çekme hatası:', err);
     } finally {
@@ -202,6 +207,13 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
           </div>
         )}
       </div>
+
+      {/* Diagnostic Footer */}
+      {debugInfo && (
+        <div style={{ padding: '4px 12px', background: '#0a0f18', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '10px', color: '#475569', textAlign: 'right' }}>
+           Bağlı: {debugInfo.server} / {debugInfo.db} (Tenant: {debugInfo.tenantId})
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         .infinite-spin {
