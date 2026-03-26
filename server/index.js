@@ -485,6 +485,54 @@ app.get('/api/production/mrp', async (req, res) => {
     }
 });
 
+// System Pre-Checks (Data Integrity)
+app.get('/api/production/pre-checks', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).send('Yetkisiz.');
+
+    const { checkType } = req.query;
+
+    try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'mps_secret_key');
+        const pool = await getTenantPool(decoded.tenantId);
+
+        let sql = '';
+        if (checkType === 'MISSING_BOM') {
+            sql = `
+                select sh.skod, sk.tanim as StokAdi 
+                from siparis_har sh 
+                left join siparis_kay k on k.sipno=sh.sipno 
+                left join stokkart sk on sk.skod=sh.skod
+                where not exists (select top 1 modelkod from stokmodel_c c where c.skod=sh.skod) 
+                  and k.siptip='S' 
+                  and sh.konum<>'F' 
+                  and sk.stoksekli='M'
+                group by sh.skod, sk.tanim
+            `;
+        } else if (checkType === 'MISSING_TIME') {
+            sql = `
+                select 
+                    modelkod as skod, 
+                    sk.tanim as StokAdi,
+                    proses,
+                    pm.Tanim as Prosesadi,
+                    (sum(isnull(mp.ptime,0))+sum(isnull(kutime,0))+sum(isnull(hatime,0))+sum(isnull(betime,0))+sum(isnull(tatime,0))) as sure 
+                from model_p mp
+                left join stokkart sk on sk.skod=mp.modelkod
+                left join proses_m pm on pm.Pro=mp.Proses
+                group by modelkod, sk.tanim, proses, pm.tanim
+                having (sum(isnull(mp.ptime,0))+sum(isnull(kutime,0))+sum(isnull(hatime,0))+sum(isnull(betime,0))+sum(isnull(tatime,0))) < 1
+            `;
+        }
+
+        const result = await pool.request().query(sql);
+        res.json(result.recordset);
+    } catch (err) {
+        console.error('Pre-Check Hatası:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // TEST: Veritabanı Bağlantı Testi
 app.get('/api/test-db', async (req, res) => {
     try {

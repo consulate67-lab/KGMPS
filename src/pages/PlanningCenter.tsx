@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { 
   ArrowLeft, Activity, 
   Package, TrendingUp, Settings,
-  LogOut
+  LogOut, ClipboardList
 } from 'lucide-react';
 import MaterialAnalysis from './MaterialAnalysis';
 import MpsPlanner from './MpsPlanner';
+import DataIntegrity from './DataIntegrity';
 import '../styles/professional.css';
 
 interface PlanningCenterProps {
@@ -14,7 +15,7 @@ interface PlanningCenterProps {
 }
 
 const PlanningCenter: React.FC<PlanningCenterProps> = ({ tenantId, onBack }) => {
-  const [activeTab, setActiveTab] = useState<'MRP' | 'GANTT' | 'KPI'>('MRP');
+  const [activeTab, setActiveTab] = useState<'MRP' | 'GANTT' | 'KPI' | 'CHECKS'>('CHECKS');
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0a0f18', overflow: 'hidden' }}>
@@ -40,6 +41,12 @@ const PlanningCenter: React.FC<PlanningCenterProps> = ({ tenantId, onBack }) => 
         </div>
 
         <div style={{ display: 'flex', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '12px' }}>
+          <TabButton 
+            active={activeTab === 'CHECKS'} 
+            onClick={() => setActiveTab('CHECKS')} 
+            icon={<ClipboardList size={16} />} 
+            label="Veri Kontrol" 
+          />
           <TabButton 
             active={activeTab === 'MRP'} 
             onClick={() => setActiveTab('MRP')} 
@@ -75,6 +82,12 @@ const PlanningCenter: React.FC<PlanningCenterProps> = ({ tenantId, onBack }) => 
 
       {/* Content Area */}
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        {activeTab === 'CHECKS' && (
+          <DataIntegrity 
+            tenantId={tenantId} 
+          />
+        )}
+
         {activeTab === 'MRP' && (
           <MaterialAnalysis 
             tenantId={tenantId} 
