@@ -232,17 +232,16 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                   <th className="px-6 py-4">Hammadde & Renk</th>
                   {groupingMode === 'SIZE' && <th className="px-6 py-4">Beden</th>}
                   <th className="px-6 py-4">Birim</th>
-                  <th className="px-6 py-4 text-center">Sipariş İhtiyacı</th>
-                  <th className="px-6 py-4 text-center">Planlanan İhtiyaç</th>
-                  <th className="px-6 py-4 text-center">Emir İhtiyacı</th>
-                  <th className="px-6 py-4 text-center">Devam Eden</th>
-                  <th className="px-6 py-4 text-center text-blue-400">Toplam İhtiyaç</th>
+                  <th className="px-6 py-4 text-center">Brüt İhtiyaç</th>
+                  <th className="px-6 py-4 text-center text-orange-400">Mevcut Stok</th>
+                  <th className="px-6 py-4 text-center text-purple-400">Satın Alma</th>
+                  <th className="px-6 py-4 text-center text-blue-400">Net İhtiyaç</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={groupingMode === 'SIZE' ? 8 : 7} className="px-6 py-20 text-center">
+                    <td colSpan={groupingMode === 'SIZE' ? 7 : 6} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center gap-4">
                         <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
                         <p className="text-sm text-slate-400 font-medium">Veriler Hesaplanıyor...</p>
@@ -251,7 +250,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={groupingMode === 'SIZE' ? 8 : 7} className="px-6 py-20 text-center text-slate-500 italic">
+                    <td colSpan={groupingMode === 'SIZE' ? 7 : 6} className="px-6 py-20 text-center text-slate-500 italic">
                       <div className="flex flex-col items-center gap-2">
                         <AlertCircle size={32} className="opacity-20 mb-2" />
                         Veri Bulunamadı
@@ -269,9 +268,16 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                           <Database size={12} className="text-slate-600" />
                           {item.HSKod_Tanim}
                         </span>
-                        <span className="text-[10px] text-indigo-400/80 font-bold mt-1 bg-indigo-500/10 w-fit px-1.5 rounded">
-                          {item.HRKod_Tanim}
-                        </span>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-[10px] text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                            Renk: {item.HRKod_Tanim}
+                          </span>
+                          {groupingMode === 'COLOR' && (
+                             <span className="text-[10px] text-slate-500 font-bold bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                               Tüm Bedenler
+                             </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     {groupingMode === 'SIZE' && (
@@ -286,12 +292,11 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                         {item.HBirim}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center font-mono text-xs">{item.Miktar1?.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center font-mono text-xs text-orange-400">{item.Miktar2?.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center font-mono text-xs text-purple-400">{item.Miktar3?.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center font-mono text-xs text-teal-400">{item.Miktar4?.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center font-mono text-sm font-bold text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">
-                      {item.MiktarTop?.toLocaleString()}
+                    <td className="px-6 py-4 text-center font-mono text-xs font-bold">{item.Miktar1?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center font-mono text-xs text-orange-400 font-bold">{item.Miktar2?.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center font-mono text-xs text-purple-400 font-bold">{item.Miktar3?.toLocaleString()}</td>
+                    <td className={`px-6 py-4 text-center font-mono text-sm font-bold ${item.Miktar4 > 0 ? 'text-red-400' : 'text-blue-400'} drop-shadow-[0_0_8px_rgba(59,130,246,0.3)]`}>
+                      {item.Miktar4?.toLocaleString()}
                     </td>
                   </tr>
                 ))}
