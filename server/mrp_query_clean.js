@@ -39,10 +39,11 @@ const getMrpQuery = (prodLocs, rawLocs) => {
       AND RTRIM(Location) IN (${rLocs})
     GROUP BY SKod, RKod, BedKod;
 
-    -- 3. BEKLEYEN SATIN ALMA (Orijinal s_gchar Modul='S' mantığı)
+    -- 3. BEKLEYEN SATIN ALMA (Eksi Bakiye Korumalı)
     DECLARE @SatinAlmaStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bekleyen FLOAT);
     INSERT INTO @SatinAlmaStok
-    SELECT SKod, RKod, BedKod, SUM(ISNULL(Giren, 0) - ISNULL(Cikan, 0))
+    SELECT SKod, RKod, BedKod, 
+           SUM(CASE WHEN (ISNULL(Giren, 0) - ISNULL(Cikan, 0)) < 0 THEN 0 ELSE (ISNULL(Giren, 0) - ISNULL(Cikan, 0)) END)
     FROM s_gchar 
     WHERE Modul = 'S' 
       AND RTRIM(Location) IN (${rLocs})
@@ -55,10 +56,10 @@ const getMrpQuery = (prodLocs, rawLocs) => {
         ISNULL(rn.Tanim, '-') as HRKod_Tanim,
         ISNULL(bd.Beden, '-') as HBeden,
         RTRIM(pd.Birim) as HBirim,
-        SUM(o.Miktar * pd.Miktar) as Miktar1, -- Toplam Brüt İhtiyaç (Siparişten Gelen)
-        MAX(ISNULL(ms.Bakiye, 0)) as Miktar2,       -- Mevcut Stok (Fiili Bakiye)
-        MAX(ISNULL(sas.Bekleyen, 0)) as Miktar3,    -- Satın Alma (Yoldaki, Bekleyen Alış)
-        (SUM(o.Miktar * pd.Miktar) - (MAX(ISNULL(ms.Bakiye, 0)) + MAX(ISNULL(sas.Bekleyen, 0)))) as Miktar4, -- Net İhtiyaç
+        SUM(o.Miktar * pd.Miktar) as Miktar1, 
+        MAX(ISNULL(ms.Bakiye, 0)) as Miktar2,
+        MAX(ISNULL(sas.Bekleyen, 0)) as Miktar3,
+        (SUM(o.Miktar * pd.Miktar) - (MAX(ISNULL(ms.Bakiye, 0)) + MAX(ISNULL(sas.Bekleyen, 0)))) as Miktar4,
         SUM(o.Miktar * pd.Miktar) as MiktarTop
     FROM @Orders o
     JOIN model_PD pd ON RTRIM(pd.ModelKod) = RTRIM(o.ModelKod)
@@ -66,12 +67,12 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     LEFT JOIN Model_PDS2R s2r ON s2r.ModelKod = pd.ModelKod AND s2r.Proses = pd.Proses AND s2r.Parcainx = pd.Parcainx AND s2r.SKod = pd.SKod
     LEFT JOIN Model_PDS2X s2x ON s2x.ModelKod = pd.ModelKod AND s2x.Proses = pd.Proses AND s2x.Parcainx = pd.Parcainx AND s2x.SKod = pd.SKod
     LEFT JOIN Dbo.P_RNK_Tip rn ON rn.Renk_kod = s2r.RKod
-    LEFT JOIN Dbo.P_Beden_D bd ON bd.Bedinx = s2x.xkod -- Model_PDS2X'teki xkod genelde Bedinx karşılığıdır
+    LEFT JOIN Dbo.P_Beden_D bd ON bd.Bedinx = s2x.xkod
     LEFT JOIN @MevcutStok ms ON ms.SKod = pd.SKod AND (ms.RKod = s2r.RKod OR s2r.RKod IS NULL)
     LEFT JOIN @SatinAlmaStok sas ON sas.SKod = pd.SKod AND (sas.RKod = s2r.RKod OR s2r.RKod IS NULL)
     GROUP BY pd.SKod, st_ham.Tanim, rn.Tanim, bd.Beden, pd.Birim
     HAVING SUM(o.Miktar * pd.Miktar) > 0
-    ORDER BY pd.SKod;
+    ORDER BY pd.SKod, rn.Tanim, bd.Beden;
   `;
 };
 

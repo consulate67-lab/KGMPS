@@ -17,26 +17,22 @@ interface MrpItem {
   HRKod_Tanim: string;
   HBeden: string;
   HBirim: string;
-  Miktar1: number; // Gerçek Sipariş İhtiyacı
-  Miktar2: number; // Planlanan İhtiyacı
-  Miktar3: number; // Emir İhtiyacı
-  Miktar4: number; // Devam Eden
-  MiktarTop: number; // Toplam İhtiyaç
+  Miktar1: number; // Brüt İhtiyaç
+  Miktar2: number; // Mevcut Stok
+  Miktar3: number; // Satın Alma
+  Miktar4: number; // Net İhtiyaç
+  MiktarTop: number;
 }
 
 interface MaterialAnalysisProps {
   tenantId: number | null;
 }
 
-type GroupingMode = 'COLOR' | 'SIZE';
-
 const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
   const [loading, setLoading] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [groupingMode, setGroupingMode] = useState<GroupingMode>('COLOR');
   
-  // Kalıcı Ayarlar (LocalStorage)
   const [prodLocs, setProdLocs] = useState<string[]>(() => {
     const saved = localStorage.getItem('mrp_prod_locs');
     return saved ? saved.split(',') : ['K0001'];
@@ -84,7 +80,6 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
         },
         headers: { Authorization: `Bearer ${token}` }
       });
-      console.log('--- MRP ANALYSIS DEBUG ---', res.data.debug);
       setMrpData(res.data.data || []);
       setMrpDebug(res.data.debug);
     } catch (err: any) {
@@ -97,38 +92,13 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
   useEffect(() => { fetchLocations(); }, []);
   useEffect(() => { fetchMrpAnalysis(); }, [fetchMrpAnalysis]);
 
-  // JS Tarafında Dinamik Gruplama (Bedenleri Renk Altında Toplar)
-  const processedData = useMemo(() => {
-    if (groupingMode === 'SIZE') return mrpData;
+  const filteredData = useMemo(() => {
+    return mrpData.filter(item => 
+      item.hskod?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.HSKod_Tanim?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [mrpData, searchTerm]);
 
-    // Renk Bazlı Gruplama Mantığı
-    const groupedMap = new Map<string, MrpItem>();
-    
-    mrpData.forEach(item => {
-      const key = `${item.hskod}_${item.HRKod_Tanim}`;
-      if (groupedMap.has(key)) {
-        const existing = groupedMap.get(key)!;
-        // Tüm bedenlerdeki hammadde stok ve ihtiyaç rakamlarını topluyoruz
-        existing.Miktar1 = (existing.Miktar1 || 0) + (item.Miktar1 || 0);
-        existing.Miktar2 = (existing.Miktar2 || 0) + (item.Miktar2 || 0);
-        existing.Miktar3 = (existing.Miktar3 || 0) + (item.Miktar3 || 0);
-        existing.Miktar4 = (existing.Miktar4 || 0) + (item.Miktar4 || 0);
-        existing.MiktarTop = (existing.MiktarTop || 0) + (item.MiktarTop || 0);
-      } else {
-        // Yeni grup oluştur: Bedeni temizleyip kopya alıyoruz
-        groupedMap.set(key, { ...item, HBeden: '-' });
-      }
-    });
-
-    return Array.from(groupedMap.values());
-  }, [mrpData, groupingMode]);
-
-  const filteredData = processedData.filter(item => 
-    item.hskod?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.HSKod_Tanim?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Ayarları Kaydet
   const saveSettings = () => {
     localStorage.setItem('mrp_prod_locs', prodLocs.join(','));
     localStorage.setItem('mrp_raw_locs', rawLocs.join(','));
@@ -157,27 +127,11 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
             <h1 className="text-lg font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent leading-tight">
               Malzeme Analizi (MRP)
             </h1>
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Hammadde İhtiyaç Planlama</p>
+            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Hammadde & Stok & Satın Alma</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Gruplama Toggle Seçeneği */}
-          <div className="flex bg-white/5 p-1 rounded-xl border border-white/5 mr-2">
-            <button 
-              onClick={() => setGroupingMode('COLOR')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${groupingMode === 'COLOR' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              RENK BAZLI
-            </button>
-            <button 
-              onClick={() => setGroupingMode('SIZE')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${groupingMode === 'SIZE' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              BEDEN BAZLI
-            </button>
-          </div>
-
           <button 
             onClick={() => setShowSettings(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-semibold transition-all group"
@@ -199,7 +153,6 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
       </div>
 
       <main className="p-6">
-        {/* Araçlar ve Filtreler */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div className="relative group w-full max-w-md">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors" size={18} />
@@ -212,45 +165,43 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => fetchMrpAnalysis()}
-              disabled={loading}
-              className={`p-2.5 rounded-xl border border-white/10 flex items-center justify-center transition-all ${loading ? 'opacity-50 cursor-not-allowed bg-blue-500/20' : 'bg-white/5 hover:bg-white/10 text-blue-400'}`}
-            >
-              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-            </button>
-          </div>
+          <button 
+            onClick={() => fetchMrpAnalysis()}
+            disabled={loading}
+            className={`p-2.5 rounded-xl border border-white/10 flex items-center justify-center transition-all ${loading ? 'opacity-50 cursor-not-allowed bg-blue-500/20' : 'bg-white/5 hover:bg-white/10 text-blue-400'}`}
+          >
+            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
 
-        {/* Veri Tablosu */}
-        <div className="bg-[#0f172a]/50 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-sm self-shadow">
+        <div className="bg-[#0f172a]/50 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-sm shadow-2xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-slate-500 font-bold border-b border-white/5">
                 <tr>
-                  <th className="px-6 py-4">Hammadde & Renk</th>
-                  {groupingMode === 'SIZE' && <th className="px-6 py-4">Beden</th>}
+                  <th className="px-6 py-4">Hammadde Kodu & Tanımı</th>
+                  <th className="px-6 py-4">Renk</th>
+                  <th className="px-6 py-4">Beden</th>
                   <th className="px-6 py-4">Birim</th>
                   <th className="px-6 py-4 text-center">Brüt İhtiyaç</th>
-                  <th className="px-6 py-4 text-center text-orange-400">Mevcut Stok</th>
-                  <th className="px-6 py-4 text-center text-purple-400">Satın Alma</th>
-                  <th className="px-6 py-4 text-center text-blue-400">Net İhtiyaç</th>
+                  <th className="px-6 py-4 text-center text-orange-400 font-bold">Mevcut Stok</th>
+                  <th className="px-6 py-4 text-center text-purple-400 font-bold">Satın Alma</th>
+                  <th className="px-6 py-4 text-center text-blue-400 font-bold">Net İhtiyaç</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={groupingMode === 'SIZE' ? 7 : 6} className="px-6 py-20 text-center">
+                    <td colSpan={8} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center gap-4">
                         <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-                        <p className="text-sm text-slate-400 font-medium">Veriler Hesaplanıyor...</p>
+                        <p className="text-sm text-slate-400 font-medium">Hesaplanıyor...</p>
                       </div>
                     </td>
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={groupingMode === 'SIZE' ? 7 : 6} className="px-6 py-20 text-center text-slate-500 italic">
+                    <td colSpan={8} className="px-6 py-20 text-center text-slate-500 italic">
                       <div className="flex flex-col items-center gap-2">
                         <AlertCircle size={32} className="opacity-20 mb-2" />
                         Veri Bulunamadı
@@ -261,41 +212,37 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                   <tr key={idx} className="hover:bg-white/[0.02] transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">
+                        <span className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors uppercase">
                           {item.hskod}
                         </span>
-                        <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
-                          <Database size={12} className="text-slate-600" />
+                        <span className="text-[11px] text-slate-400 font-medium mt-0.5 truncate max-w-[200px]">
                           {item.HSKod_Tanim}
                         </span>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-[10px] text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                            Renk: {item.HRKod_Tanim}
-                          </span>
-                          {groupingMode === 'COLOR' && (
-                             <span className="text-[10px] text-slate-500 font-bold bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                               Tüm Bedenler
-                             </span>
-                          )}
-                        </div>
                       </div>
                     </td>
-                    {groupingMode === 'SIZE' && (
-                       <td className="px-6 py-4">
-                        <span className="text-[10px] px-2 py-0.5 bg-indigo-500/20 border border-indigo-500/20 text-indigo-300 rounded-lg font-bold">
-                          {item.HBeden}
-                        </span>
-                      </td>
-                    )}
-                    <td className="px-6 py-4">
-                      <span className="text-[10px] px-2 py-0.5 bg-white/5 border border-white/10 rounded-full font-bold">
-                        {item.HBirim}
+                    <td className="px-6 py-4 text-[10px] font-bold text-indigo-400">
+                      <span className="bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                        {item.HRKod_Tanim}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center font-mono text-xs font-bold">{item.Miktar1?.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center font-mono text-xs text-orange-400 font-bold">{item.Miktar2?.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center font-mono text-xs text-purple-400 font-bold">{item.Miktar3?.toLocaleString()}</td>
-                    <td className={`px-6 py-4 text-center font-mono text-sm font-bold ${item.Miktar4 > 0 ? 'text-red-400' : 'text-blue-400'} drop-shadow-[0_0_8px_rgba(59,130,246,0.3)]`}>
+                    <td className="px-6 py-4 text-[10px] font-bold text-slate-400 text-center">
+                      <span className="bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                        {item.HBeden}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-[10px] font-bold text-center">
+                      {item.HBirim}
+                    </td>
+                    <td className="px-6 py-4 text-center font-mono text-xs font-bold text-slate-300">
+                      {item.Miktar1?.toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 text-center font-mono text-xs font-bold text-orange-400">
+                      {item.Miktar2?.toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 text-center font-mono text-xs font-bold text-purple-400">
+                      {item.Miktar3?.toLocaleString()}
+                    </td>
+                    <td className={`px-6 py-4 text-center font-mono text-sm font-bold ${item.Miktar4 > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                       {item.Miktar4?.toLocaleString()}
                     </td>
                   </tr>
@@ -306,7 +253,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
         </div>
 
         {error && (
-          <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400 text-sm animate-pulse">
+          <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400 text-sm">
             <AlertCircle size={18} />
             {error}
           </div>
@@ -321,105 +268,49 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
         )}
       </main>
 
-      {/* Ayarlar Modalı (Side Overlay) */}
       {showSettings && (
         <div className="fixed inset-0 z-[100] flex justify-end">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
           <div className="relative w-full max-w-md bg-[#0f172a] border-l border-white/10 shadow-3xl flex flex-col animate-slide-left h-screen">
-            
-            <div className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-900/50">
-              <div className="flex items-center gap-3">
-                <Settings2 className="text-blue-400" size={20} />
-                <h2 className="text-lg font-bold">Sistem Ayarları</h2>
-              </div>
-              <button 
-                onClick={() => setShowSettings(false)}
-                className="p-2 hover:bg-white/5 rounded-full text-slate-400 transition-colors"
-              >
-                <X size={20} />
-              </button>
+            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+              <h2 className="text-lg font-bold">Ayarlar</h2>
+              <button onClick={() => setShowSettings(false)}><X size={20}/></button>
             </div>
-
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              
-              {/* Üretim Lokasyonları */}
               <section>
-                <div className="flex items-center gap-2 mb-4 text-sm font-bold text-blue-400">
-                  <RefreshCw size={16} />
-                  Sipariş & Üretim Depoları
-                </div>
-                <p className="text-[11px] text-slate-500 mb-3 ml-6 font-medium leading-relaxed">Siparişlerin ve üretim emirlerinin durumunun kontrol edileceği depolar.</p>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-white/10">
+                <h3 className="text-sm font-bold text-blue-400 mb-2">Üretim Depoları</h3>
+                <div className="grid grid-cols-2 gap-2">
                   {locations.map(loc => (
-                    <button
-                      key={loc.id}
-                      onClick={() => toggleLoc(loc.id, prodLocs, setProdLocs)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
-                        prodLocs.includes(loc.id) 
-                        ? 'bg-blue-600/20 border-blue-500 text-white shadow-[0_0_15px_-5px_#3b82f6]' 
-                        : 'bg-white/5 border-white/10 text-slate-500 hover:border-white/20'
-                      }`}
-                    >
+                    <button key={loc.id} onClick={() => toggleLoc(loc.id, prodLocs, setProdLocs)}
+                      className={`p-2 rounded-xl border text-xs ${prodLocs.includes(loc.id) ? 'bg-blue-600 border-blue-500' : 'bg-white/5 border-white/10'}`}>
                       {loc.name}
-                      {prodLocs.includes(loc.id) && <Check size={14} />}
                     </button>
                   ))}
                 </div>
               </section>
-
-              {/* Hammadde Lokasyonları */}
               <section>
-                <div className="flex items-center gap-2 mb-4 text-sm font-bold text-indigo-400">
-                  <Filter size={16} />
-                  Hammadde & Satın Alma Depoları
-                </div>
-                <p className="text-[11px] text-slate-500 mb-3 ml-6 font-medium leading-relaxed">Mevcut stok ve satın alma ihtiyacının hesaplanacağı depolar.</p>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-white/10">
+                <h3 className="text-sm font-bold text-indigo-400 mb-2">Hammadde Depoları</h3>
+                <div className="grid grid-cols-2 gap-2">
                   {locations.map(loc => (
-                    <button
-                      key={loc.id}
-                      onClick={() => toggleLoc(loc.id, rawLocs, setRawLocs)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
-                        rawLocs.includes(loc.id) 
-                        ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-[0_0_15px_-5px_#6366f1]' 
-                        : 'bg-white/5 border-white/10 text-slate-500 hover:border-white/20'
-                      }`}
-                    >
+                    <button key={loc.id} onClick={() => toggleLoc(loc.id, rawLocs, setRawLocs)}
+                      className={`p-2 rounded-xl border text-xs ${rawLocs.includes(loc.id) ? 'bg-indigo-600 border-indigo-500' : 'bg-white/5 border-white/10'}`}>
                       {loc.name}
-                      {rawLocs.includes(loc.id) && <Check size={14} />}
                     </button>
                   ))}
                 </div>
               </section>
-
             </div>
-
-            <div className="p-6 border-t border-white/5 bg-slate-900/50">
-              <button 
-                onClick={saveSettings}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20 transition-all hover:scale-[1.02] active:scale-95"
-              >
-                <Check size={20} />
-                Ayarları Kaydet ve Yenile
-              </button>
+            <div className="p-6 border-t border-white/5">
+              <button onClick={saveSettings} className="w-full py-4 bg-blue-600 rounded-2xl font-bold">Kaydet</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Animasyonlar */}
       <style>{`
-        @keyframes slide-left {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        .animate-slide-left {
-          animation: slide-left 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
-        .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        @keyframes slide-left { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .animate-slide-left { animation: slide-left 0.3s ease-out forwards; }
       `}</style>
-
     </div>
   );
 };
