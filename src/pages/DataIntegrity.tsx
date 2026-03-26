@@ -24,6 +24,7 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
   const [loading, setLoading] = useState(false);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProses, setSelectedProses] = useState<string>('all');
   const [debugInfo, setDebugInfo] = useState<any>(null);
 
   const apiBase = 'https://kgmps-production.up.railway.app';
@@ -50,10 +51,14 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
     fetchIssues();
   }, [activeSubTab]);
 
-  const filteredIssues = issues.filter(issue => 
-    issue.skod.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    issue.StokAdi.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredIssues = issues.filter(issue => {
+    const matchesSearch = issue.skod.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        issue.StokAdi.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesProses = selectedProses === 'all' || issue.Prosesadi === selectedProses;
+    return matchesSearch && matchesProses;
+  });
+
+  const uniqueProsesler = Array.from(new Set(issues.map(i => i.Prosesadi).filter(Boolean))) as string[];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0a0f18', color: 'white' }}>
@@ -131,24 +136,51 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
       {/* Main Content Area */}
       <div style={{ flex: 1, padding: '24px', overflow: 'auto' }}>
         {/* Search & Filters */}
-        <div style={{ marginBottom: '20px', position: 'relative' }}>
-          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-          <input 
-            type="text" 
-            placeholder="Stok kodu veya adıyla ara..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              background: 'rgba(15, 23, 42, 0.6)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '12px',
-              padding: '12px 12px 12px 40px',
-              color: 'white',
-              fontSize: '14px',
-              outline: 'none'
-            }}
-          />
+        <div style={{ marginBottom: '20px', display: 'flex', gap: '12px' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+            <input 
+              type="text" 
+              placeholder="Stok kodu veya adıyla ara..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '12px',
+                padding: '12px 12px 12px 40px',
+                color: 'white',
+                fontSize: '14px',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          {activeSubTab === 'MISSING_TIME' && (
+            <div style={{ width: '200px' }}>
+              <select 
+                value={selectedProses}
+                onChange={(e) => setSelectedProses(e.target.value)}
+                style={{
+                  width: '100%',
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  padding: '12px',
+                  color: 'white',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="all">Tüm Prosesler</option>
+                {uniqueProsesler.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {loading ? (
