@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
   RefreshCw, Search, Boxes, AlertCircle, Settings2, 
-  Database, LogOut, X, Check, Filter
+  LogOut, X
 } from 'lucide-react';
 import '../styles/professional.css';
 
