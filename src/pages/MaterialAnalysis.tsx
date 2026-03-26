@@ -175,9 +175,9 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
         </div>
 
         <div className="bg-[#0f172a]/50 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-sm shadow-2xl">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[calc(100vh-250px)] overflow-y-auto scrollbar-thin">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-white/5 text-[11px] uppercase tracking-widest text-slate-500 font-bold border-b border-white/5">
+              <thead className="sticky top-0 z-10 bg-[#161e31] text-[11px] uppercase tracking-widest text-slate-500 font-bold border-b border-white/5">
                 <tr>
                   <th className="px-6 py-4">Hammadde Kodu & Tanımı</th>
                   <th className="px-6 py-4">Renk</th>

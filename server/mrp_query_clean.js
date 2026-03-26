@@ -64,8 +64,14 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     FROM @Orders o
     JOIN model_PD pd ON RTRIM(pd.ModelKod) = RTRIM(o.ModelKod)
     JOIN StokKart st_ham ON st_ham.SKod = pd.SKod
-    LEFT JOIN Model_PDS2R s2r ON s2r.ModelKod = pd.ModelKod AND s2r.Proses = pd.Proses AND s2r.Parcainx = pd.Parcainx AND s2r.SKod = pd.SKod
-    LEFT JOIN Model_PDS2X s2x ON s2x.ModelKod = pd.ModelKod AND s2x.Proses = pd.Proses AND s2x.Parcainx = pd.Parcainx AND s2x.SKod = pd.SKod
+    LEFT JOIN Model_PDS2R s2r ON RTRIM(s2r.ModelKod) = RTRIM(pd.ModelKod) 
+                             AND RTRIM(s2r.SKod) = RTRIM(pd.SKod)
+                             AND s2r.Proses = pd.Proses 
+                             AND s2r.Parcainx = pd.Parcainx
+    LEFT JOIN Model_PDS2X s2x ON RTRIM(s2x.ModelKod) = RTRIM(pd.ModelKod) 
+                             AND RTRIM(s2x.SKod) = RTRIM(pd.SKod)
+                             AND s2x.Proses = pd.Proses 
+                             AND s2x.Parcainx = pd.Parcainx
     LEFT JOIN Dbo.P_RNK_Tip rn ON rn.Renk_kod = s2r.RKod
     LEFT JOIN Dbo.P_Beden_D bd ON bd.Bedinx = s2x.xkod
     LEFT JOIN @MevcutStok ms ON ms.SKod = pd.SKod AND (ms.RKod = s2r.RKod OR s2r.RKod IS NULL)
