@@ -33,7 +33,7 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     -- 2. HAMMADDE MEVCUT STOK (StokHareket TABLOSUNDAN)
     DECLARE @MevcutStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bakiye FLOAT);
     INSERT INTO @MevcutStok
-    SELECT RTRIM(SKod), RKod, BedKod, SUM(ISNULL(Giren, 0) - ISNULL(Cikan, 0)) 
+    SELECT RTRIM(SKod), RKod, BedKod, SUM(ISNULL(Miktar, 0)) 
     FROM StokHareket 
     WHERE Modul = 'X' -- Anlık bakiye
       AND RTRIM(Location) IN (${rLocs})
@@ -42,8 +42,7 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     -- 3. BEKLEYEN SATIN ALMA (StokHareket TABLOSUNDAN)
     DECLARE @SatinAlmaStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bekleyen FLOAT);
     INSERT INTO @SatinAlmaStok
-    SELECT RTRIM(SKod), RKod, BedKod, 
-           SUM(CASE WHEN (ISNULL(Giren, 0) - ISNULL(Cikan, 0)) < 0 THEN 0 ELSE (ISNULL(Giren, 0) - ISNULL(Cikan, 0)) END)
+    SELECT RTRIM(SKod), RKod, BedKod, SUM(ISNULL(Miktar, 0))
     FROM StokHareket 
     WHERE Modul = 'S' -- Satın Alma Siparişleri
       AND RTRIM(Location) IN (${rLocs})
