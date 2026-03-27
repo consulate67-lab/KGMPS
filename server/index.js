@@ -217,9 +217,9 @@ async function getTenantPool(tenantID) {
         server: tenantData.db_host,
         database: tenantData.db_name,
         options: { encrypt: false, trustServerCertificate: true },
-        pool: { max: 15, min: 0, idleTimeoutMillis: 60000 },
-        requestTimeout: 60000,
-        connectionTimeout: 30000
+        pool: { max: 15, min: 0, idleTimeoutMillis: 1800000 },
+        requestTimeout: 1800000,
+        connectionTimeout: 1800000
     };
 
     const newPool = new mssql.ConnectionPool(tenantConfig);
