@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AlertTriangle, CheckCircle2, 
   Search, RefreshCw, 
-  PackageSearch, Clock, ClipboardList, 
-  ExternalLink, FileWarning
+  PackageSearch, Clock, 
+  FileWarning
 } from 'lucide-react';
 import '../styles/professional.css';
 
