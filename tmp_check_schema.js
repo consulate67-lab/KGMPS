@@ -2,7 +2,7 @@ import sql from 'mssql';
 import dotenv from 'dotenv';
 dotenv.config();
 
-async function checkStokHareketS() {
+async function checkFisTips() {
     const config = {
         user: 'sa',
         password: 'dgfceu',
@@ -17,13 +17,10 @@ async function checkStokHareketS() {
     try {
         let pool = await sql.connect(config);
         
-        console.log("--- STOKHAREKETS Columns ---");
-        let res1 = await pool.request().query("SELECT TOP 1 * FROM stokharekets");
+        console.log("--- STOKHAREKET FisTip/FisTur Check ---");
+        // Hangi fiş tipleri ve türleri stok bakiye oluşturuyor?
+        let res1 = await pool.request().query("SELECT TOP 20 FisTip, FisTur, COUNT(*) as Count FROM StokHareket GROUP BY FisTip, FisTur");
         console.table(res1.recordset);
-
-        console.log("--- STOKHAREKETS Modul Check ---");
-        let res2 = await pool.request().query("SELECT TOP 20 Modul, COUNT(*) as RowCount FROM stokharekets GROUP BY Modul");
-        console.table(res2.recordset);
 
         process.exit(0);
     } catch (err) {
@@ -32,4 +29,4 @@ async function checkStokHareketS() {
     }
 }
 
-checkStokHareketS();
+checkFisTips();

@@ -179,6 +179,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 z-10 bg-[#161e31] text-[11px] uppercase tracking-widest text-slate-500 font-bold border-b border-white/5">
                 <tr>
+                  <th className="px-6 py-4">ID</th>
                   <th className="px-6 py-4">Hammadde Kodu & Tanımı</th>
                   <th className="px-6 py-4">Renk</th>
                   <th className="px-6 py-4">Beden</th>
@@ -192,7 +193,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
               <tbody className="divide-y divide-white/5">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-20 text-center">
+                    <td colSpan={9} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center gap-4">
                         <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
                         <p className="text-sm text-slate-400 font-medium">Hesaplanıyor...</p>
@@ -201,7 +202,7 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-20 text-center text-slate-500 italic">
+                    <td colSpan={9} className="px-6 py-20 text-center text-slate-500 italic">
                       <div className="flex flex-col items-center gap-2">
                         <AlertCircle size={32} className="opacity-20 mb-2" />
                         Veri Bulunamadı
@@ -210,6 +211,11 @@ const MaterialAnalysis: React.FC<MaterialAnalysisProps> = () => {
                   </tr>
                 ) : filteredData.map((item, idx) => (
                   <tr key={idx} className="hover:bg-white/[0.02] transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 font-bold text-[10px]">
+                        {idx + 1}
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors uppercase">

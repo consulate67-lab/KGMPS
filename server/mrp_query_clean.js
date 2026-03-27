@@ -8,7 +8,7 @@ const getMrpQuery = (prodLocs, rawLocs) => {
   const rLocs = formatLocs(rawLocs || 'K0001');
 
   return `
-    -- 1. GEÇİCİ TABLO: AKTİF SİPARİŞLER VE BOM EŞLEŞMELERİ
+    -- 1. GEÇİCİ TABLO: AKTİF SİPARİŞLER VE BOM EŞLEŞMELERİ (SİPARİŞ RENGİYLE)
     DECLARE @Orders TABLE (
         SipNo INT, SipHarinx INT, SKod VARCHAR(30), RKod INT, BedKod INT,
         Miktar FLOAT, Location VARCHAR(10), ModelKod VARCHAR(30)
@@ -30,25 +30,25 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     GROUP BY sh.SipNo, sh.SipHarinx, sh.SKod, si.RKod, si.BedKod, sk.Location, upm.ModelKod
     HAVING SUM(ISNULL(si.Giren, 0) - ISNULL(si.Cikan, 0)) > 0;
 
-    -- 2. HAMMADDE MEVCUT STOK (StokHareket TABLOSUNDAN)
+    -- 2. HAMMADDE MEVCUT STOK (StokHareket TABLOSUNDAN - FisTip AYRIMI İLE)
     DECLARE @MevcutStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bakiye FLOAT);
     INSERT INTO @MevcutStok
     SELECT RTRIM(SKod), RKod, BedKod, SUM(ISNULL(Miktar, 0)) 
     FROM StokHareket 
-    WHERE Modul = 'X' -- Anlık bakiye
+    WHERE FisTip <> 'Siparis' -- Fatura, Irsaliye, Devir vb. (Miktar zaten signed gelir)
       AND RTRIM(Location) IN (${rLocs})
     GROUP BY SKod, RKod, BedKod;
 
-    -- 3. BEKLEYEN SATIN ALMA (StokHareket TABLOSUNDAN)
+    -- 3. BEKLEYEN SATIN ALMA (StokHareket TABLOSUNDAN - FisTip/FisTur AYRIMI İLE)
     DECLARE @SatinAlmaStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bekleyen FLOAT);
     INSERT INTO @SatinAlmaStok
     SELECT RTRIM(SKod), RKod, BedKod, SUM(ISNULL(Miktar, 0))
     FROM StokHareket 
-    WHERE Modul = 'S' -- Satın Alma Siparişleri
+    WHERE FisTip = 'Siparis' AND FisTur = 'ssa' -- Satın Alma Siparişleri
       AND RTRIM(Location) IN (${rLocs})
     GROUP BY SKod, RKod, BedKod;
 
-    -- 4. TAM MRP ANALİZİ (stokharekets ve Matris Uyumluluğu)
+    -- 4. TAM MRP ANALİZİ (Matris + OzKod + StokHareket Entegrasyonu)
     SELECT 
         pd.SKod as hskod,
         st_ham.Tanim as HSKod_Tanim,
@@ -69,7 +69,7 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     -- Tanımları Getir
     LEFT JOIN Dbo.P_RNK_Tip rn_mat ON rn_mat.Renk_kod = s2r.RKod
     LEFT JOIN Dbo.P_Beden_D bd_mat ON bd_mat.Bedinx = s2x.xkod
-    -- Reçetedeki OzKod Yedek
+    -- Reçetedeki OzKod Yedek (Hızlandırılmış Join)
     LEFT JOIN Dbo.P_RNK_Tip rn_pd ON rn_pd.Renk_kod = TRY_CAST(pd.OzKod1 AS INT)
     LEFT JOIN Dbo.P_Beden_D bd_pd ON bd_pd.Bedinx = TRY_CAST(pd.OzKod2 AS INT)
     -- Stok & Satın Alma Bakiye Eşleşmesi
