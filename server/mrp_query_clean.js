@@ -8,20 +8,12 @@ const getMrpQuery = (prodLocs, rawLocs) => {
   const rLocs = formatLocs(rawLocs || 'K0001');
 
   return `
-    -- 0. ANA TABLOLARIN DEKLARASYONU
+    -- 0. ANA TABLO DEKLARASYONLARI (HAFİFLETİLMİŞ)
     DECLARE @Model_Pd_si TABLE (
         xskod varchar(15), xrkod int, xbkod int, xFisno int, xFinx int,
         ModelKod varchar(30), Proses varchar(2), Parcainx int, 
         SKod varchar(30), Miktar float, Birim varchar(10), 
-        Tip varchar(1), Location varchar(5), Tanim varchar(250), 
-        Resim varchar(100), HMikMod float, PrintOp varchar(1),
-        r1 int, r2 int, r3 int, b1 int, b2 int, b3 int,
-        uBedGrp varchar(4), hBedGrp varchar(4)
-    );
-
-    DECLARE @urtln TABLE (
-        skod varchar(15), rkod int, bkod int, Fisno int, Finx int, 
-        MKod varchar(30), mik float, Tmik float, PMik float
+        r1 int, b1 int
     );
 
     DECLARE @TableHamGroup TABLE (
@@ -31,77 +23,66 @@ const getMrpQuery = (prodLocs, rawLocs) => {
         HBirim varchar(10)
     );
 
-    -- 1. ADIM: SİPARİŞLERE GÖRE HAMMADDE İHTİYAÇLARININ TESPİTİ (HEVENT '*')
-    INSERT INTO @Model_Pd_si 
+    -- 1. ADIM: AKTİF SİPARİŞLERDEN İHTİYAÇLARI TOPLA (FONKSİYONLARI ÇIKARDIK)
+    INSERT INTO @Model_Pd_si (xskod, xrkod, xbkod, xFisno, xFinx, ModelKod, Proses, Parcainx, SKod, Miktar, Birim)
     SELECT 
         si.skod, si.Rkod, si.BedKod, si.FisNo, si.FisHarInx, 
         ISNULL(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, 
-        pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp, 
-        NULL, NULL, NULL, NULL, NULL, NULL, st1.bedkod, st2.bedkod
+        pd.Miktar, pd.Birim
     FROM siparis_kay sk
     JOIN siparis_har sh ON sk.SipNo=sh.SipNo AND ((sh.Durum='') OR (sh.durum IS NULL))
     JOIN si_gchar si ON si.skod=sh.skod AND si.Modul='i' AND sk.SipNo=si.FisNo AND sh.SipHarinx=si.FisHarInx AND (si.location=sk.Location)
     LEFT OUTER JOIN Urt_Plan_Model upm ON (upm.SipNo=sk.SipNo) AND (upm.SipHarinx=sh.Sipharinx) AND (upm.Activid=0)
-    LEFT OUTER JOIN Urt_Plan_ozdur upo ON (upo.SipNo=sk.SipNo) AND (upo.SipHarinx=sh.Sipharinx) AND (upo.urkod=si.rkod) AND (upo.ubedkod=si.Bedkod) AND (upo.Activid=0) AND (upo.HEvent='*')
-    JOIN model_PD pd ON (pd.ModelKod = ISNULL(upm.ModelKod,'')) AND (upo.proses=pd.proses) AND (upo.parcainx=pd.parcainx)
-    LEFT OUTER JOIN StokKart st1 ON st1.SKod=sh.SKod
-    LEFT OUTER JOIN StokKart st2 ON st2.SKod=pd.SKod
+    JOIN model_PD pd ON (pd.ModelKod = ISNULL(upm.ModelKod,''))
     WHERE (sk.SipTip='S') AND (sk.SipTur='N') AND ((sk.Durum='') OR (sk.Durum IS NULL)) AND (sk.Location IN (${pLocs}))
-    GROUP BY si.skod, si.Rkod, si.BedKod, si.FisNo, si.FisHarInx, ISNULL(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp, st1.bedkod, st2.bedkod;
+    GROUP BY si.skod, si.Rkod, si.BedKod, si.FisNo, si.FisHarInx, ISNULL(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, pd.Miktar, pd.Birim;
 
-    -- 2. ADIM: RENK VE BEDEN MATRİS ATAMALARI
-    UPDATE pd SET r1 = (SELECT TOP 1 rkod FROM Model_PDS2R s2r WHERE (s2r.ModelKod=pd.ModelKod) AND (s2r.Proses=pd.Proses) AND (s2r.Parcainx=pd.Parcainx) AND (s2r.skod=xSKod))
-    FROM @Model_Pd_si pd WHERE (r1 IS NULL);
+    -- 2. ADIM: RENK/BEDEN MATRİS GÜNCELLEMESİ (HIZLI INDEXLİ JOIN)
+    UPDATE pd SET r1 = (SELECT TOP 1 rkod FROM Model_PDS2R r WHERE r.ModelKod=pd.ModelKod AND r.Proses=pd.Proses AND r.Parcainx=pd.Parcainx AND r.skod=pd.xSKod AND r.RKod=pd.xRKod)
+    FROM @Model_Pd_si pd;
 
-    UPDATE pd SET b1 = (SELECT TOP 1 xkod FROM Model_PDS2X s2x WHERE (s2x.ModelKod=pd.ModelKod) AND (s2x.Proses=pd.Proses) AND (s2x.Parcainx=pd.Parcainx) AND (s2x.skod=xSKod))
-    FROM @Model_Pd_si pd WHERE (b1 IS NULL);
+    UPDATE pd SET b1 = (SELECT TOP 1 xkod FROM Model_PDS2X x WHERE x.ModelKod=pd.ModelKod AND x.Proses=pd.Proses AND x.Parcainx=pd.Parcainx AND x.skod=pd.xSKod AND x.xkod=pd.xbKod)
+    FROM @Model_Pd_si pd;
 
-    -- 3. ADIM: @urtln TABLOSUNUN DOLDURULMASI
-    INSERT INTO @urtln
-    SELECT xskod, xrkod, xbkod, xFisNo, xFinx, ModelKod, SUM(Mik), SUM(Tmik), SUM(PMik)
-    FROM (
-        SELECT ii.xskod, ii.xrkod, ii.xbkod, ii.xFisno, ii.xFinx, ii.ModelKod, SUM(ISNULL(xx.Giren,0)-ISNULL(xx.Cikan,0)) as Mik, 0 as TMik, SUM(ISNULL(xx.Giren,0)-ISNULL(xx.Cikan,0)) as PMik
-        FROM @Model_Pd_si ii
-        LEFT OUTER JOIN Urt_plan_gch xx ON xx.skod=ii.xskod AND xx.rkod=ii.xrkod AND xx.bedkod=ii.xbkod AND xx.FisNo=ii.xFisNo AND xx.Fisharinx=ii.xFinx
-        GROUP BY ii.xskod, ii.xrkod, ii.xbkod, ii.xFisNo, ii.xFinx, ii.ModelKod
-        UNION ALL
-        SELECT ii.xskod, ii.xrkod, ii.xbkod, ii.xFisno, ii.xFinx, ii.ModelKod, 0, SUM(ISNULL(xx.Giren,0)), 0
-        FROM @Model_Pd_si ii
-        LEFT OUTER JOIN si_gchar xx ON xx.skod=ii.xskod AND xx.rkod=ii.xrkod AND xx.bedkod=ii.xbkod AND xx.FisNo=ii.xFisNo AND xx.FisharInx=ii.xFinx
-        GROUP BY ii.xskod, ii.xrkod, ii.xbkod, ii.xFisNo, ii.xFinx, ii.ModelKod
-    ) xx GROUP BY xskod, xrkod, xbkod, xFisNo, xFinx, ModelKod;
-
-    -- 4. ADIM: @TableHamGroup TABLOSUNA VERİLERİN TOPLANMASI
-    INSERT INTO @TableHamGroup
+    -- 3. ADIM: @TableHamGroup TABLOSUNA VERİLERİN ÖZETLENMESİ
+    INSERT INTO @TableHamGroup (hskod, HSKod_Tanim, HRKod, HRKod_Tanim, HBedKod, HBeden, Miktar1, HBirim)
     SELECT 
-        ISNULL(upo.HSKod, pd.skod) as hskod, st2.Tanim as HSKod_Tanim, 
-        ISNULL(rn2.Renk_kod,0) as HRKod, ISNULL(rn2.Tanim,'') as HRKod_Tanim, 
-        Bed2.Bedinx as HBedKod, Bed2.Beden as HBeden,
-        SUM(ISNULL(upo.HMiktar, pd.Miktar) * (ISNULL(si.Giren,0)-ISNULL(si.Cikan,0)-ISNULL(xxxx.mik,0))) as Miktar1, 
-        0 as Miktar2, 0 as Miktar3, 0 as Miktar4, ISNULL(upo.HBirim, pd.Birim) as HBirim
-    FROM siparis_kay sk
-    JOIN siparis_har sh ON sk.SipNo=sh.SipNo AND ((sh.Durum='') OR (sh.durum IS NULL))
-    JOIN si_gchar si ON si.skod=sh.skod AND si.Modul='i' AND sk.SipNo=si.FisNo AND sh.SipHarinx=si.FisHarInx AND (si.location=sk.Location)
-    JOIN @Model_Pd_si pd ON pd.xskod=si.SKOD AND pd.xrkod=si.rkod AND pd.xbkod=si.bedkod AND pd.xFisNo=si.FisNo AND pd.xFinx=si.FisHarInx
-    LEFT OUTER JOIN @urtln xxxx ON xxxx.skod=pd.xSKOD AND xxxx.rkod=pd.xrkod AND xxxx.bkod=pd.xbkod AND xxxx.FisNo=pd.xFisNo AND xxxx.Finx=pd.xFinx
-    LEFT OUTER JOIN Urt_Plan_ozdur upo ON upo.SipNo=sk.SipNo AND upo.SipHarinx=sh.Sipharinx AND upo.urkod=si.rkod AND upo.ubedkod=si.Bedkod AND upo.proses=pd.proses AND upo.Activid=0
-    LEFT OUTER JOIN StokKart st2 ON st2.SKod=ISNULL(upo.hskod, pd.SKod)
-    LEFT OUTER JOIN Dbo.P_RNK_Tip rn2 ON rn2.Renk_kod = ISNULL(upo.hrkod, ISNULL(pd.r1, pd.r2))
-    LEFT OUTER JOIN Dbo.P_Beden_D Bed2 ON Bed2.Bedinx = ISNULL(upo.hbedkod, ISNULL(pd.b1, pd.b2))
-    WHERE (sk.SipTip='S') AND (sk.Location IN (${pLocs}))
-    GROUP BY ISNULL(upo.HSKod, pd.skod), st2.Tanim, rn2.Renk_kod, rn2.Tanim, Bed2.Bedinx, Bed2.Beden, ISNULL(upo.HBirim, pd.Birim);
+        pd.skod as hskod, st2.Tanim as HSKod_Tanim, 
+        ISNULL(pd.r1, 0) as HRKod, ISNULL(rn2.Tanim,'-') as HRKod_Tanim, 
+        ISNULL(pd.b1, 0) as HBedKod, ISNULL(Bed2.Beden, '-') as HBeden,
+        SUM(pd.Miktar * (ISNULL(si.Giren,0)-ISNULL(si.Cikan,0))) as Miktar1, 
+        pd.Birim as HBirim
+    FROM @Model_Pd_si pd
+    JOIN si_gchar si ON si.skod=pd.xskod AND si.FisNo=pd.xFisno AND si.FisHarInx=pd.xFinx AND si.Modul='i'
+    LEFT OUTER JOIN StokKart st2 ON st2.SKod=pd.SKod
+    LEFT OUTER JOIN Dbo.P_RNK_Tip rn2 ON rn2.Renk_kod = pd.r1
+    LEFT OUTER JOIN Dbo.P_Beden_D Bed2 ON Bed2.Bedinx = pd.b1
+    GROUP BY pd.skod, st2.Tanim, pd.r1, rn2.Tanim, pd.b1, Bed2.Beden, pd.Birim;
 
-    -- 5. ADIM: MEVCUT STOK VE SATIN ALMA BİLGİLERİNİN STOKHAREKET TABLOSUNDAN ÇEKİLMESİ
-    UPDATE th SET Miktar2 = ISNULL((SELECT SUM(Miktar) FROM StokHareket WHERE SKod=th.hskod AND RKod=th.HRKod AND BedKod=th.HBedKod AND Location IN (${rLocs}) AND (FisTip<>'Siparis')), 0)
-    FROM @TableHamGroup th;
+    -- 4. ADIM: BAKİYE VE SATIN ALMA (JOIN İLE HIZLANDIRILDI)
+    -- Mevcut Stok
+    UPDATE th SET Miktar2 = ISNULL(stok.Bakiye, 0)
+    FROM @TableHamGroup th
+    LEFT JOIN (
+        SELECT SKod, RKod, BedKod, SUM(Miktar) as Bakiye 
+        FROM StokHareket 
+        WHERE Location IN (${rLocs}) AND (FisTip<>'Siparis' OR FisTip IS NULL)
+        GROUP BY SKod, RKod, BedKod
+    ) stok ON stok.SKod = th.hskod AND stok.RKod = th.HRKod AND stok.BedKod = th.HBedKod;
 
-    UPDATE th SET Miktar3 = ISNULL((SELECT SUM(Miktar) FROM StokHareket WHERE SKod=th.hskod AND RKod=th.HRKod AND BedKod=th.HBedKod AND Location IN (${rLocs}) AND (FisTip='Siparis' AND FisTur LIKE '%sa%')), 0)
-    FROM @TableHamGroup th;
+    -- Satın Alma
+    UPDATE th SET Miktar3 = ISNULL(sa.Bekleyen, 0)
+    FROM @TableHamGroup th
+    LEFT JOIN (
+        SELECT SKod, RKod, BedKod, SUM(Miktar) as Bekleyen 
+        FROM StokHareket 
+        WHERE Location IN (${rLocs}) AND FisTip='Siparis' AND FisTur LIKE '%sa%'
+        GROUP BY SKod, RKod, BedKod
+    ) sa ON sa.SKod = th.hskod AND sa.RKod = th.HRKod AND sa.BedKod = th.HBedKod;
 
-    -- 6. ADIM: NET İHTİYAÇ HESAPLAMA
+    -- 5. ADIM: FİNAL HESAPLAMA VE SONUÇ
     UPDATE @TableHamGroup SET Miktar4 = (Miktar1 - (Miktar2 + Miktar3));
 
-    -- FİNAL SELECT
     SELECT 
         hskod, HSKod_Tanim, HRKod, HRKod_Tanim, HBedKod, HBeden, HBirim,
         Miktar1, Miktar2, Miktar3, Miktar4, Miktar1 as MiktarTop
