@@ -10,13 +10,13 @@ const getMrpQuery = (prodLocs, rawLocs) => {
   return `
     -- 1. GEÇİCİ TABLO: AKTİF SİPARİŞLER VE BOM EŞLEŞMELERİ
     DECLARE @Orders TABLE (
-        SipNo INT, SipHarinx INT, SKod VARCHAR(30),
+        SipNo INT, SipHarinx INT, SKod VARCHAR(30), RKod INT, BedKod INT,
         Miktar FLOAT, Location VARCHAR(10), ModelKod VARCHAR(30)
     );
 
     INSERT INTO @Orders
     SELECT 
-        sh.SipNo, sh.SipHarinx, sh.SKod, 
+        sh.SipNo, sh.SipHarinx, sh.SKod, si.RKod, si.BedKod,
         SUM(ISNULL(si.Giren, 0) - ISNULL(si.Cikan, 0)) as Miktar,
         RTRIM(sk.Location),
         ISNULL(upm.ModelKod, (SELECT TOP 1 c.ModelKod FROM stokmodel_c c WHERE c.SKod = sh.SKod ORDER BY c.insDT DESC))
@@ -27,10 +27,10 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     WHERE RTRIM(sk.SipTip) = 'S' 
       AND (RTRIM(sh.Durum) = '' OR sh.Durum IS NULL)
       AND RTRIM(sk.Location) IN (${pLocs})
-    GROUP BY sh.SipNo, sh.SipHarinx, sh.SKod, sk.Location, upm.ModelKod
+    GROUP BY sh.SipNo, sh.SipHarinx, sh.SKod, si.RKod, si.BedKod, sk.Location, upm.ModelKod
     HAVING SUM(ISNULL(si.Giren, 0) - ISNULL(si.Cikan, 0)) > 0;
 
-    -- 2. HAMMADDE MEVCUT STOK (Orijinal s_gchar mantığı)
+    -- 2. HAMMADDE MEVCUT STOK
     DECLARE @MevcutStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bakiye FLOAT);
     INSERT INTO @MevcutStok
     SELECT SKod, RKod, BedKod, SUM(ISNULL(Giren, 0) - ISNULL(Cikan, 0)) 
@@ -39,7 +39,7 @@ const getMrpQuery = (prodLocs, rawLocs) => {
       AND RTRIM(Location) IN (${rLocs})
     GROUP BY SKod, RKod, BedKod;
 
-    -- 3. BEKLEYEN SATIN ALMA (Eksi Bakiye Korumalı)
+    -- 3. BEKLEYEN SATIN ALMA
     DECLARE @SatinAlmaStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bekleyen FLOAT);
     INSERT INTO @SatinAlmaStok
     SELECT SKod, RKod, BedKod, 
@@ -49,12 +49,12 @@ const getMrpQuery = (prodLocs, rawLocs) => {
       AND RTRIM(Location) IN (${rLocs})
     GROUP BY SKod, RKod, BedKod;
 
-    -- 4. TAM MRP ANALİZİ (Hammadde Kodu + Renk + Beden + Mevcut + Satın Alma)
+    -- 4. TAM MRP ANALİZİ (OzKod Garantili Renk & Beden Ayrımı)
     SELECT 
         pd.SKod as hskod,
         st_ham.Tanim as HSKod_Tanim,
-        ISNULL(rn.Tanim, '-') as HRKod_Tanim,
-        ISNULL(bd.Beden, '-') as HBeden,
+        ISNULL(rn_pd.Tanim, ISNULL(rn_mat.Tanim, '-')) as HRKod_Tanim, -- Önce OzKod1, sonra Matris
+        ISNULL(bd_pd.Beden, ISNULL(bd_mat.Beden, '-')) as HBeden,    -- Önce OzKod2, sonra Matris
         RTRIM(pd.Birim) as HBirim,
         SUM(o.Miktar * pd.Miktar) as Miktar1, 
         MAX(ISNULL(ms.Bakiye, 0)) as Miktar2,
@@ -64,21 +64,21 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     FROM @Orders o
     JOIN model_PD pd ON RTRIM(pd.ModelKod) = RTRIM(o.ModelKod)
     JOIN StokKart st_ham ON st_ham.SKod = pd.SKod
-    LEFT JOIN Model_PDS2R s2r ON RTRIM(s2r.ModelKod) = RTRIM(pd.ModelKod) 
-                             AND RTRIM(s2r.SKod) = RTRIM(pd.SKod)
-                             AND s2r.Proses = pd.Proses 
-                             AND s2r.Parcainx = pd.Parcainx
-    LEFT JOIN Model_PDS2X s2x ON RTRIM(s2x.ModelKod) = RTRIM(pd.ModelKod) 
-                             AND RTRIM(s2x.SKod) = RTRIM(pd.SKod)
-                             AND s2x.Proses = pd.Proses 
-                             AND s2x.Parcainx = pd.Parcainx
-    LEFT JOIN Dbo.P_RNK_Tip rn ON rn.Renk_kod = s2r.RKod
-    LEFT JOIN Dbo.P_Beden_D bd ON bd.Bedinx = s2x.xkod
-    LEFT JOIN @MevcutStok ms ON ms.SKod = pd.SKod AND (ms.RKod = s2r.RKod OR s2r.RKod IS NULL)
-    LEFT JOIN @SatinAlmaStok sas ON sas.SKod = pd.SKod AND (sas.RKod = s2r.RKod OR s2r.RKod IS NULL)
-    GROUP BY pd.SKod, st_ham.Tanim, rn.Tanim, bd.Beden, pd.Birim
+    -- Renk & Beden Matris Bağlantıları
+    LEFT JOIN Model_PDS2R s2r ON RTRIM(s2r.ModelKod) = RTRIM(pd.ModelKod) AND RTRIM(s2r.SKod) = RTRIM(pd.SKod) AND s2r.RKod = o.RKod AND s2r.Parcainx = pd.Parcainx
+    LEFT JOIN Model_PDS2X s2x ON RTRIM(s2x.ModelKod) = RTRIM(pd.ModelKod) AND RTRIM(s2x.SKod) = RTRIM(pd.SKod) AND s2x.xkod = o.BedKod AND s2x.Parcainx = pd.Parcainx
+    -- Tanımları Getir
+    LEFT JOIN Dbo.P_RNK_Tip rn_mat ON rn_mat.Renk_kod = s2r.RKod
+    LEFT JOIN Dbo.P_Beden_D bd_mat ON bd_mat.Bedinx = s2x.xkod
+    -- Reçetedeki OzKod (Sabit Renk/Beden) üzerinden tanımlar (PERFORMANS ODAKLI JOIN)
+    LEFT JOIN Dbo.P_RNK_Tip rn_pd ON rn_pd.Renk_kod = TRY_CAST(pd.OzKod1 AS INT)
+    LEFT JOIN Dbo.P_Beden_D bd_pd ON bd_pd.Bedinx = TRY_CAST(pd.OzKod2 AS INT)
+    -- Stok & Satın Alma Bakiye Eşleşmesi
+    LEFT JOIN @MevcutStok ms ON ms.SKod = pd.SKod AND (ms.RKod = s2r.RKod OR ms.RKod = 0)
+    LEFT JOIN @SatinAlmaStok sas ON sas.SKod = pd.SKod AND (sas.RKod = s2r.RKod OR sas.RKod = 0)
+    GROUP BY pd.SKod, st_ham.Tanim, rn_pd.Tanim, rn_mat.Tanim, bd_pd.Beden, bd_mat.Beden, pd.Birim
     HAVING SUM(o.Miktar * pd.Miktar) > 0
-    ORDER BY pd.SKod, rn.Tanim, bd.Beden;
+    ORDER BY pd.SKod;
   `;
 };
 

@@ -88,13 +88,13 @@ const ClientLogin: React.FC<ClientLoginProps> = ({ onLogin, onAdminSwitch }) => 
           </label>
           <select 
             className="glass-input" 
-            style={{ marginBottom: '20px', appearance: 'none', cursor: 'pointer' }}
+            style={{ marginBottom: '20px', appearance: 'none', cursor: 'pointer', background: '#1e293b', color: 'white' }}
             value={selectedTenant}
             onChange={(e) => setSelectedTenant(Number(e.target.value))}
           >
-            {firms.length === 0 && <option value="">Firmalar Yükleniyor...</option>}
+            {firms.length === 0 && <option value="" className="bg-[#0f172a] text-white">Firmalar Yükleniyor...</option>}
             {firms.map(f => (
-              <option key={f.id} value={f.id}>{f.name}</option>
+              <option key={f.id} value={f.id} className="bg-[#0f172a] text-white">{f.name}</option>
             ))}
           </select>
 

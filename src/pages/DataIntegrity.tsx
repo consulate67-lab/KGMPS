@@ -144,10 +144,12 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
             <select 
               value={selectedProses}
               onChange={(e) => setSelectedProses(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-sm font-semibold outline-none cursor-pointer hover:bg-white/10"
+              className="bg-[#1e293b] border border-white/10 rounded-2xl py-3 px-4 text-sm font-semibold text-white outline-none cursor-pointer hover:bg-slate-700 transition-colors"
             >
-              <option value="all">Tüm Prosesler</option>
-              {uniqueProsesler.map(p => <option key={p} value={p}>{p}</option>)}
+              <option value="all" className="bg-[#0f172a] text-white">Tüm Prosesler</option>
+              {uniqueProsesler.map(p => (
+                <option key={p} value={p} className="bg-[#0f172a] text-white">{p}</option>
+              ))}
             </select>
           )}
         </div>
