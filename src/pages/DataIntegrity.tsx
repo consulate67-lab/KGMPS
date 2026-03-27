@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AlertTriangle, CheckCircle2, 
   Search, RefreshCw, 
-  PackageSearch, Clock, ClipboardList
+  PackageSearch, Clock, ClipboardList, 
+  ExternalLink, FileWarning
 } from 'lucide-react';
 import '../styles/professional.css';
 
@@ -39,7 +40,6 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const result = await response.json();
-      console.log('--- DATA INTEGRITY DEBUG ---', result.debug);
       setIssues(result.data || []);
       setDebugInfo(result.debug);
     } catch (err) {
@@ -53,211 +53,183 @@ const DataIntegrity: React.FC<DataIntegrityProps> = () => {
     fetchIssues();
   }, [activeSubTab]);
 
-  const filteredIssues = issues.filter(issue => {
-    const matchesSearch = issue.skod.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        issue.StokAdi.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesProses = selectedProses === 'all' || issue.Prosesadi === selectedProses;
-    return matchesSearch && matchesProses;
-  });
+  const filteredIssues = useMemo(() => {
+    return issues.filter(issue => {
+      const matchesSearch = (issue.skod || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (issue.StokAdi || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesProses = selectedProses === 'all' || issue.Prosesadi === selectedProses;
+      return matchesSearch && matchesProses;
+    });
+  }, [issues, searchTerm, selectedProses]);
 
-  const uniqueProsesler = Array.from(new Set(issues.map(i => i.Prosesadi).filter(Boolean))) as string[];
+  const uniqueProsesler = useMemo(() => {
+    return Array.from(new Set(issues.map(i => i.Prosesadi).filter(Boolean))) as string[];
+  }, [issues]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0a0f18', color: 'white' }}>
-      {/* Sub Header / Stats */}
-      <div style={{ padding: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(30, 41, 59, 0.4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ background: '#f59e0b', padding: '12px', borderRadius: '12px', color: '#000' }}>
-            <AlertTriangle size={24} />
+    <div className="flex flex-col h-full bg-[#0a0f18] text-slate-200">
+      
+      {/* Header Stat Area */}
+      <div className="p-6 border-b border-white/5 bg-[#0f172a]/40 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <div className="bg-amber-500/20 p-3 rounded-2xl border border-amber-500/20 text-amber-500">
+            <FileWarning size={28} />
           </div>
           <div>
-            <h2 style={{ fontSize: '20px', fontWeight: '700', margin: 0 }}>Veri Bütünlüğü Kontrolü</h2>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '4px 0 0 0' }}>Sistemi çalıştırmadan önce düzeltilmesi gereken kritik eksiklikler.</p>
+            <h2 className="text-xl font-bold text-white tracking-tight">Veri Bütünlüğü Analizi</h2>
+            <p className="text-xs text-slate-500 font-medium">Sistem simülasyonu için eksik tanımların kontrolü</p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '24px' }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Toplam Hata</div>
-            <div style={{ fontSize: '24px', fontWeight: '800', color: issues.length > 0 ? '#ef4444' : '#10b981' }}>{issues.length}</div>
+        <div className="flex items-center gap-8">
+          <div className="text-right">
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block mb-1">Tespit Edilen Hata</span>
+            <span className={`text-2xl font-black ${issues.length > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+              {issues.length}
+            </span>
           </div>
           <button 
             onClick={fetchIssues}
-            className="pro-button-outline" 
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px' }}
             disabled={loading}
+            className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all group"
           >
-            <RefreshCw size={16} className={loading ? 'infinite-spin' : ''} />
-            Yenile
+            <RefreshCw size={20} className={`text-blue-400 ${loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
           </button>
         </div>
       </div>
 
-      {/* Control Tabs */}
-      <div style={{ padding: '0 24px', display: 'flex', gap: '8px', marginTop: '16px' }}>
+      {/* Tabs Layout */}
+      <div className="px-6 mt-4 flex gap-2">
         <button 
-          onClick={() => setActiveSubTab('MISSING_BOM')}
-          style={{
-            padding: '12px 20px',
-            background: activeSubTab === 'MISSING_BOM' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
-            border: 'none',
-            borderBottom: activeSubTab === 'MISSING_BOM' ? '2px solid #3b82f6' : '2px solid transparent',
-            color: activeSubTab === 'MISSING_BOM' ? '#fff' : '#64748b',
-            cursor: 'pointer',
-            fontWeight: '600',
-            transition: 'all 0.3s ease',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}
+          onClick={() => { setActiveSubTab('MISSING_BOM'); setSelectedProses('all'); }}
+          className={`px-5 py-3 rounded-t-2xl text-xs font-bold flex items-center gap-2 transition-all border-b-2 ${
+            activeSubTab === 'MISSING_BOM' 
+            ? 'bg-blue-600/10 border-blue-500 text-blue-400' 
+            : 'border-transparent text-slate-500 hover:text-slate-300'
+          }`}
         >
-          <PackageSearch size={18} />
-          Model Ağacı Olmayanlar
+          <PackageSearch size={16} />
+          Eksik Model Ağacı (BOM)
         </button>
         <button 
-          onClick={() => setActiveSubTab('MISSING_TIME')}
-          style={{
-            padding: '12px 20px',
-            background: activeSubTab === 'MISSING_TIME' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
-            border: 'none',
-            borderBottom: activeSubTab === 'MISSING_TIME' ? '2px solid #3b82f6' : '2px solid transparent',
-            color: activeSubTab === 'MISSING_TIME' ? '#fff' : '#64748b',
-            cursor: 'pointer',
-            fontWeight: '600',
-            transition: 'all 0.3s ease',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}
+          onClick={() => { setActiveSubTab('MISSING_TIME'); setSelectedProses('all'); }}
+          className={`px-5 py-3 rounded-t-2xl text-xs font-bold flex items-center gap-2 transition-all border-b-2 ${
+            activeSubTab === 'MISSING_TIME' 
+            ? 'bg-blue-600/10 border-blue-500 text-blue-400' 
+            : 'border-transparent text-slate-500 hover:text-slate-300'
+          }`}
         >
-          <Clock size={18} />
-          Süre Tanımı Olmayanlar
+          <Clock size={16} />
+          Eksik Operasyon Süresi
         </button>
       </div>
 
-      {/* Main Content Area */}
-      <div style={{ flex: 1, padding: '24px', overflow: 'auto' }}>
-        {/* Search & Filters */}
-        <div style={{ marginBottom: '20px', display: 'flex', gap: '12px' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+      {/* Analysis Grid Area */}
+      <div className="flex-1 p-6 overflow-hidden flex flex-col pt-2">
+        
+        {/* Toolbar */}
+        <div className="mb-4 flex gap-3 items-center">
+          <div className="relative flex-1 group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors" size={18} />
             <input 
               type="text" 
-              placeholder="Stok kodu veya adıyla ara..."
+              placeholder="Hatalı kaydı ara..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%',
-                background: 'rgba(15, 23, 42, 0.6)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '12px',
-                padding: '12px 12px 12px 40px',
-                color: 'white',
-                fontSize: '14px',
-                outline: 'none'
-              }}
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all"
             />
           </div>
 
-          {activeSubTab === 'MISSING_TIME' && (
-            <div style={{ width: '200px' }}>
-              <select 
-                value={selectedProses}
-                onChange={(e) => setSelectedProses(e.target.value)}
-                style={{
-                  width: '100%',
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '12px',
-                  padding: '12px',
-                  color: 'white',
-                  fontSize: '14px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="all">Tüm Prosesler</option>
-                {uniqueProsesler.map(p => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
+          {activeSubTab === 'MISSING_TIME' && uniqueProsesler.length > 0 && (
+            <select 
+              value={selectedProses}
+              onChange={(e) => setSelectedProses(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-sm font-semibold outline-none cursor-pointer hover:bg-white/10"
+            >
+              <option value="all">Tüm Prosesler</option>
+              {uniqueProsesler.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
           )}
         </div>
 
-        {loading ? (
-          <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <RefreshCw size={40} className="infinite-spin" color="#3b82f6" />
+        {/* Data Grid (Table) View */}
+        <div className="flex-1 bg-[#0f172a]/30 border border-white/5 rounded-3xl overflow-hidden flex flex-col">
+          <div className="overflow-x-auto overflow-y-auto scrollbar-thin flex-1">
+            <table className="w-full border-collapse text-left">
+              <thead className="sticky top-0 z-10 bg-[#161e31] border-b border-white/5">
+                <tr className="text-[10px] uppercase font-black text-slate-500 tracking-[0.2em]">
+                  <th className="px-6 py-4">Sipariş/Stok Kodu</th>
+                  <th className="px-6 py-4">Stok Adı / Ürün Tanımı</th>
+                  {activeSubTab === 'MISSING_TIME' && <th className="px-6 py-4">Hatalı Proses</th>}
+                  <th className="px-6 py-4 text-right">Eksiklik Türü</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-20 text-center">
+                       <RefreshCw className="animate-spin text-blue-500 mx-auto" size={32} />
+                       <p className="mt-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Veri Analiz Ediliyor...</p>
+                    </td>
+                  </tr>
+                ) : filteredIssues.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-20 text-center">
+                       <CheckCircle2 className="text-emerald-500 mx-auto mb-3" size={48} />
+                       <h3 className="text-lg font-bold text-white">Her Şey Yolunda!</h3>
+                       <p className="text-sm text-slate-500">Bu kategori altında herhangi bir veri sorunu tespit edilmedi.</p>
+                    </td>
+                  </tr>
+                ) : filteredIssues.map((issue, idx) => (
+                  <tr key={idx} className="hover:bg-red-500/5 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 font-bold text-[10px]">
+                          {idx + 1}
+                        </div>
+                        <span className="text-sm font-black text-white group-hover:text-red-400 transition-colors uppercase">
+                          {issue.skod}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-slate-300">
+                        {issue.StokAdi}
+                      </div>
+                    </td>
+                    {activeSubTab === 'MISSING_TIME' && (
+                      <td className="px-6 py-4">
+                        <span className="text-[11px] font-bold px-3 py-1 bg-amber-500/10 border border-amber-500/10 text-amber-500 rounded-lg">
+                          {issue.Prosesadi || 'Genel'}
+                        </span>
+                      </td>
+                    )}
+                    <td className="px-6 py-4 text-right">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-600/10 border border-red-600/20 text-[10px] font-black text-red-500 uppercase">
+                        <AlertTriangle size={12} />
+                        {activeSubTab === 'MISSING_BOM' ? 'BOM TANIMSIZ' : 'SÜRE HATASI'}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : filteredIssues.length === 0 ? (
-          <div style={{ 
-            height: '300px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            background: 'rgba(30, 41, 59, 0.2)',
-            borderRadius: '24px',
-            border: '2px dashed rgba(255,255,255,0.05)'
-          }}>
-            <CheckCircle2 size={60} color="#10b981" style={{ marginBottom: '20px' }} />
-            <h3 style={{ fontSize: '18px', margin: '0 0 4px 0' }}>Sorun Bozukluğu Bulunamadı!</h3>
-            <p style={{ color: '#94a3b8', fontSize: '14px' }}>Seçilen kategori için tüm veriler sistemde eksiksiz görünüyor.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '16px' }}>
-            {filteredIssues.map((issue, idx) => (
-              <div 
-                key={idx}
-                className="glass-card"
-                style={{ 
-                  padding: '16px', 
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
-                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <ClipboardList size={14} color="#ef4444" />
-                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#fff', letterSpacing: '0.5px' }}>{issue.skod}</span>
-                  </div>
-                  <div style={{ fontSize: '15px', color: '#cbd5e1', fontWeight: '500' }}>{issue.StokAdi}</div>
-                  {issue.Prosesadi && (
-                    <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                       <span style={{ color: '#ef4444', fontWeight: 'bold' }}>Proses:</span> {issue.Prosesadi}
-                    </div>
-                  )}
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                   <div style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '11px', fontWeight: '700' }}>
-                      {activeSubTab === 'MISSING_BOM' ? 'Model Ağacı Yok' : 'Süre (< 1)'}
-                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        </div>
+
       </div>
 
-      {/* Diagnostic Footer */}
+      {/* Connection Info */}
       {debugInfo && (
-        <div style={{ padding: '4px 12px', background: '#0a0f18', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '10px', color: '#475569', textAlign: 'right' }}>
-           Bağlı: {debugInfo.server} / {debugInfo.db} (Tenant: {debugInfo.tenantId})
+        <div className="px-6 py-2 border-t border-white/5 text-[9px] font-bold text-slate-700 flex justify-between items-center bg-black/20 uppercase tracking-widest">
+           <span>Canlı Veri Takibi Aktif</span>
+           <div className="flex gap-4">
+              <span>Sunucu: {debugInfo.server}</span>
+              <span>DB: {debugInfo.db}</span>
+              <span>Kayıt: {issues.length}</span>
+           </div>
         </div>
       )}
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .infinite-spin {
-          animation: spin 2s linear infinite;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}} />
     </div>
   );
 };

@@ -2,7 +2,7 @@ import sql from 'mssql';
 import dotenv from 'dotenv';
 dotenv.config();
 
-async function checkSchema() {
+async function checkOzKods() {
     const config = {
         user: 'sa',
         password: 'dgfceu',
@@ -17,13 +17,14 @@ async function checkSchema() {
     try {
         let pool = await sql.connect(config);
         
-        console.log("--- Model_PDS2R COLUMNS ---");
-        let res1 = await pool.request().query("SELECT TOP 1 * FROM Model_PDS2R");
-        if (res1.recordset.length > 0) console.log(Object.keys(res1.recordset[0]));
+        console.log("--- MODEL_PD OZKODS ---");
+        let res1 = await pool.request().query("SELECT TOP 20 ModelKod, SKod, OzKod1, OzKod2, OzKod3 FROM model_PD WHERE ModelKod IS NOT NULL");
+        console.table(res1.recordset);
 
-        console.log("--- Model_PDS2X COLUMNS ---");
-        let res2 = await pool.request().query("SELECT TOP 1 * FROM Model_PDS2X");
-        if (res2.recordset.length > 0) console.log(Object.keys(res2.recordset[0]));
+        console.log("--- MODEL_PDS2R (SKod != ModelKod) ---");
+        // Hammaddeye özel renk tanımlanmış mı?
+        let res2 = await pool.request().query("SELECT TOP 20 * FROM Model_PDS2R WHERE RTRIM(SKod) <> RTRIM(ModelKod)");
+        console.table(res2.recordset);
 
         process.exit(0);
     } catch (err) {
@@ -32,4 +33,4 @@ async function checkSchema() {
     }
 }
 
-checkSchema();
+checkOzKods();
