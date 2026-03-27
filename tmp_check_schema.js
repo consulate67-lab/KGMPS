@@ -2,7 +2,7 @@ import sql from 'mssql';
 import dotenv from 'dotenv';
 dotenv.config();
 
-async function checkOzKods() {
+async function checkStokHareketS() {
     const config = {
         user: 'sa',
         password: 'dgfceu',
@@ -17,13 +17,12 @@ async function checkOzKods() {
     try {
         let pool = await sql.connect(config);
         
-        console.log("--- MODEL_PD OZKODS ---");
-        let res1 = await pool.request().query("SELECT TOP 20 ModelKod, SKod, OzKod1, OzKod2, OzKod3 FROM model_PD WHERE ModelKod IS NOT NULL");
+        console.log("--- STOKHAREKETS Columns ---");
+        let res1 = await pool.request().query("SELECT TOP 1 * FROM stokharekets");
         console.table(res1.recordset);
 
-        console.log("--- MODEL_PDS2R (SKod != ModelKod) ---");
-        // Hammaddeye özel renk tanımlanmış mı?
-        let res2 = await pool.request().query("SELECT TOP 20 * FROM Model_PDS2R WHERE RTRIM(SKod) <> RTRIM(ModelKod)");
+        console.log("--- STOKHAREKETS Modul Check ---");
+        let res2 = await pool.request().query("SELECT TOP 20 Modul, COUNT(*) as RowCount FROM stokharekets GROUP BY Modul");
         console.table(res2.recordset);
 
         process.exit(0);
@@ -33,4 +32,4 @@ async function checkOzKods() {
     }
 }
 
-checkOzKods();
+checkStokHareketS();

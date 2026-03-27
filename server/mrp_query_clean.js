@@ -30,31 +30,31 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     GROUP BY sh.SipNo, sh.SipHarinx, sh.SKod, si.RKod, si.BedKod, sk.Location, upm.ModelKod
     HAVING SUM(ISNULL(si.Giren, 0) - ISNULL(si.Cikan, 0)) > 0;
 
-    -- 2. HAMMADDE MEVCUT STOK
+    -- 2. HAMMADDE MEVCUT STOK (stokharekets TABLOSUNDAN)
     DECLARE @MevcutStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bakiye FLOAT);
     INSERT INTO @MevcutStok
-    SELECT SKod, RKod, BedKod, SUM(ISNULL(Giren, 0) - ISNULL(Cikan, 0)) 
-    FROM s_gchar 
-    WHERE Modul = 'X' AND FisNo = 0 AND FisHarInx = 0
+    SELECT RTRIM(SKod), RKod, BedKod, SUM(ISNULL(Giren, 0) - ISNULL(Cikan, 0)) 
+    FROM stokharekets 
+    WHERE Modul = 'X' -- Anlık bakiye
       AND RTRIM(Location) IN (${rLocs})
     GROUP BY SKod, RKod, BedKod;
 
-    -- 3. BEKLEYEN SATIN ALMA
+    -- 3. BEKLEYEN SATIN ALMA (stokharekets TABLOSUNDAN)
     DECLARE @SatinAlmaStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bekleyen FLOAT);
     INSERT INTO @SatinAlmaStok
-    SELECT SKod, RKod, BedKod, 
+    SELECT RTRIM(SKod), RKod, BedKod, 
            SUM(CASE WHEN (ISNULL(Giren, 0) - ISNULL(Cikan, 0)) < 0 THEN 0 ELSE (ISNULL(Giren, 0) - ISNULL(Cikan, 0)) END)
-    FROM s_gchar 
-    WHERE Modul = 'S' 
+    FROM stokharekets 
+    WHERE Modul = 'S' -- Satın Alma Siparişleri
       AND RTRIM(Location) IN (${rLocs})
     GROUP BY SKod, RKod, BedKod;
 
-    -- 4. TAM MRP ANALİZİ (OzKod Garantili Renk & Beden Ayrımı)
+    -- 4. TAM MRP ANALİZİ (stokharekets ve Matris Uyumluluğu)
     SELECT 
         pd.SKod as hskod,
         st_ham.Tanim as HSKod_Tanim,
-        ISNULL(rn_pd.Tanim, ISNULL(rn_mat.Tanim, '-')) as HRKod_Tanim, -- Önce OzKod1, sonra Matris
-        ISNULL(bd_pd.Beden, ISNULL(bd_mat.Beden, '-')) as HBeden,    -- Önce OzKod2, sonra Matris
+        ISNULL(rn_mat.Tanim, ISNULL(rn_pd.Tanim, '-')) as HRKod_Tanim, 
+        ISNULL(bd_mat.Beden, ISNULL(bd_pd.Beden, '-')) as HBeden,
         RTRIM(pd.Birim) as HBirim,
         SUM(o.Miktar * pd.Miktar) as Miktar1, 
         MAX(ISNULL(ms.Bakiye, 0)) as Miktar2,
@@ -64,13 +64,13 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     FROM @Orders o
     JOIN model_PD pd ON RTRIM(pd.ModelKod) = RTRIM(o.ModelKod)
     JOIN StokKart st_ham ON st_ham.SKod = pd.SKod
-    -- Renk & Beden Matris Bağlantıları
+    -- Renk & Beden Matris Bağlantıları (Sipariş Bazlı)
     LEFT JOIN Model_PDS2R s2r ON RTRIM(s2r.ModelKod) = RTRIM(pd.ModelKod) AND RTRIM(s2r.SKod) = RTRIM(pd.SKod) AND s2r.RKod = o.RKod AND s2r.Parcainx = pd.Parcainx
     LEFT JOIN Model_PDS2X s2x ON RTRIM(s2x.ModelKod) = RTRIM(pd.ModelKod) AND RTRIM(s2x.SKod) = RTRIM(pd.SKod) AND s2x.xkod = o.BedKod AND s2x.Parcainx = pd.Parcainx
     -- Tanımları Getir
     LEFT JOIN Dbo.P_RNK_Tip rn_mat ON rn_mat.Renk_kod = s2r.RKod
     LEFT JOIN Dbo.P_Beden_D bd_mat ON bd_mat.Bedinx = s2x.xkod
-    -- Reçetedeki OzKod (Sabit Renk/Beden) üzerinden tanımlar (PERFORMANS ODAKLI JOIN)
+    -- Reçetedeki OzKod Yedek
     LEFT JOIN Dbo.P_RNK_Tip rn_pd ON rn_pd.Renk_kod = TRY_CAST(pd.OzKod1 AS INT)
     LEFT JOIN Dbo.P_Beden_D bd_pd ON bd_pd.Bedinx = TRY_CAST(pd.OzKod2 AS INT)
     -- Stok & Satın Alma Bakiye Eşleşmesi
