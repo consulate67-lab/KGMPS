@@ -8,98 +8,87 @@ const getMrpQuery = (prodLocs, rawLocs) => {
   const rLocs = formatLocs(rawLocs || 'K0001');
 
   return `
-    -- 1. GEÇİCİ TABLO: AKTİF SİPARİŞLER (PRODÜKSİYON)
-    DECLARE @Orders TABLE (
-        SipNo INT, SipHarinx INT, SKod VARCHAR(30), RKod INT, BedKod INT,
-        Miktar FLOAT, Location VARCHAR(10), ModelKod VARCHAR(30)
+    -- Orijinal ve Tam Kapsamlı MRP Sorgu Motoru (Solariz / Korgün Standartı)
+    DECLARE @Model_Pd_si Table (
+        xskod varchar(15), xrkod int, xbkod int, xFisno int , xFinx int,
+        ModelKod varchar(30), Proses varchar(2), Parcainx int, 
+        SKod varchar(30), Miktar float, Birim varchar(10), 
+        Tip varchar(1), Location varchar(5), Tanim varchar(250), 
+        Resim varchar(100), HMikMod float, PrintOp varchar(1),
+        r1 int, r2 int, r3 int, b1 int, b2 int, b3 int,
+        uBedGrp varchar(4), hBedGrp varchar(4)
     );
 
-    INSERT INTO @Orders
+    -- 1. BÖLÜM: SİPARİŞ ANALİZİ VE İHTİYAÇLAR (REÇETE MATRİSİ İLE)
+    INSERT @Model_Pd_si 
     SELECT 
-        sh.SipNo, sh.SipHarinx, sh.SKod, si.RKod, si.BedKod,
-        SUM(ISNULL(si.Giren, 0) - ISNULL(si.Cikan, 0)) as Miktar,
-        RTRIM(sk.Location),
-        ISNULL(upm.ModelKod, (SELECT TOP 1 c.ModelKod FROM stokmodel_c c WHERE c.SKod = sh.SKod ORDER BY c.insDT DESC))
-    FROM siparis_kay sk
-    JOIN siparis_har sh ON sk.SipNo = sh.SipNo
-    JOIN si_gchar si ON si.skod = sh.skod AND si.Modul = 'i' AND si.FisNo = sk.SipNo AND si.FisHarInx = sh.Sipharinx
-    LEFT JOIN Urt_Plan_Model upm ON upm.SipNo = sk.SipNo AND upm.SipHarinx = sh.Sipharinx AND upm.Activid = 0
-    WHERE sk.SipTip = 'S' 
-      AND (sh.Durum = '' OR sh.Durum IS NULL)
-      AND RTRIM(sk.Location) IN (${pLocs})
-    GROUP BY sh.SipNo, sh.SipHarinx, sh.SKod, si.RKod, si.BedKod, sk.Location, upm.ModelKod
-    HAVING SUM(ISNULL(si.Giren, 0) - ISNULL(si.Cikan, 0)) > 0;
+        si.skod, si.Rkod, si.BedKod, si.FisNo, si.FisHarInx,
+        ISNULL(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod,
+        pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp,
+        NULL, NULL, NULL, NULL, NULL, NULL, st1.bedkod, st2.bedkod
+    FROM siparis_kay sk 
+    JOIN siparis_har sh ON sk.SipNo=sh.SipNo AND ((sh.Durum='') OR (sh.durum IS NULL))
+    JOIN si_gchar si ON si.skod=sh.skod AND si.Modul='i' AND sk.SipNo=si.FisNo AND sh.SipHarinx=si.FisHarInx AND (si.location=sk.Location)
+    LEFT OUTER JOIN Urt_Plan_Model upm ON (upm.SipNo=sk.SipNo) AND (upm.SipHarinx=sh.Sipharinx) AND (upm.Activid=0)
+    LEFT OUTER JOIN Urt_Plan_ozdur upo ON (upo.SipNo=sk.SipNo) AND (upo.SipHarinx=sh.Sipharinx) AND (upo.urkod=si.rkod) AND (upo.ubedkod=si.Bedkod) AND (upo.Activid=0) AND (upo.HEvent='*')
+    JOIN model_PD pd ON (pd.ModelKod = ISNULL(upm.ModelKod,'')) AND (upo.proses=pd.proses) AND (upo.parcainx=pd.parcainx)
+    LEFT OUTER JOIN StokKart st1 ON (st1.SKod=sh.SKod)
+    LEFT OUTER JOIN StokKart st2 ON (st2.SKod=pd.SKod)
+    WHERE (sk.SipTip='S') 
+      AND (sk.SipTur = 'N') 
+      AND ((sk.Durum='') OR (sk.Durum IS NULL))
+      AND (sk.Location IN (${pLocs}))
+    GROUP BY si.skod, si.Rkod, si.BedKod, si.FisNo, si.FisHarInx, ISNULL(upm.ModelKod,''), pd.Proses, pd.Parcainx, pd.SKod, pd.Miktar, pd.Birim, pd.Tip, pd.Location, pd.Tanim, pd.Resim, pd.HMikMod, pd.PrintOp, st1.bedkod, st2.bedkod;
 
-    -- 2. HAMMADDE MEVCUT STOK (StokHareket - FisTip ile)
-    DECLARE @MevcutStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bakiye FLOAT);
-    INSERT INTO @MevcutStok
-    SELECT RTRIM(SKod), RKod, BedKod, SUM(ISNULL(Miktar, 0)) 
-    FROM StokHareket 
-    WHERE (FisTip <> 'Siparis' OR FisTip IS NULL) -- Stok bakiye oluşturanlar
-      AND RTRIM(Location) IN (${rLocs})
-    GROUP BY SKod, RKod, BedKod;
+    -- 2. BÖLÜM: RENK VE BEDEN MATRİS GÜNCELLEMELERİ (Model_PDS2R, Model_R2R vb.)
+    UPDATE pd SET r1 = (SELECT RKod FROM Model_PDS2R s2r WHERE (s2r.ModelKod=pd.ModelKod) AND (s2r.Proses=pd.Proses) AND (s2r.Parcainx=pd.Parcainx) AND (s2r.skod=xSKod))
+    FROM @Model_Pd_si pd
+    WHERE (r1 is null) AND EXISTS((SELECT rkod FROM Model_PDS2R s2r WHERE (s2r.ModelKod=pd.ModelKod) AND (s2r.Proses=pd.Proses) AND (s2r.Parcainx=pd.Parcainx) AND (s2r.skod=xSKod)));
 
-    -- 3. BEKLEYEN SATIN ALMA (StokHareket - FisTip = 'Siparis')
-    -- 'ssa' (Satın Alma Siparişi) ve Miktar > 0 olanlar
-    DECLARE @SatinAlmaStok TABLE (SKod VARCHAR(30), RKod INT, BedKod INT, Bekleyen FLOAT);
-    INSERT INTO @SatinAlmaStok
-    SELECT RTRIM(SKod), RKod, BedKod, SUM(ISNULL(Miktar, 0))
-    FROM StokHareket 
-    WHERE FisTip = 'Siparis' 
-      AND (FisTur LIKE '%sa%') -- Satın Alma Siparişleri (ssa)
-      AND Miktar > 0
-    GROUP BY SKod, RKod, BedKod;
+    UPDATE pd SET r1= (SELECT rkod2 FROM Model_R2R WHERE (ModelKod=pd.ModelKod) AND (Proses=pd.Proses) AND (Parcainx=pd.Parcainx) AND (RKod1=xRKod))
+    FROM @Model_Pd_si pd
+    WHERE (r1 is null) AND EXISTS((SELECT rkod2 FROM Model_R2R WHERE (ModelKod=pd.ModelKod) AND (Proses=pd.Proses) AND (Parcainx=pd.Parcainx) AND (RKod1=xRKod)));
 
-    -- 4. TAM MRP ANALİZİ (OUTER APPLY Renk/Beden Matrisi ile)
+    UPDATE pd SET b1= (SELECT xkod FROM Model_PDS2X s2x WHERE (s2x.ModelKod=pd.ModelKod) AND (s2x.Proses=pd.Proses) AND (s2x.Parcainx=pd.Parcainx) AND (s2x.skod=xSKod))
+    FROM @Model_Pd_si pd
+    WHERE (b1 is null) AND EXISTS((SELECT xkod FROM Model_PDS2X s2x WHERE (s2x.ModelKod=pd.ModelKod) AND (s2x.Proses=pd.Proses) AND (s2x.Parcainx=pd.Parcainx) AND (s2x.skod=xSKod)));
+
+    -- 3. BÖLÜM: STOK VE SATIN ALMA TABLOSUNUN OLUŞTURULMASI
+    DECLARE @TableHamGroup TABLE (
+        hskod varchar(15), HSKod_Tanim varchar(100), HRKod int, HRKod_Tanim varchar(100), HBedKod int, HBeden varchar(10),
+        Miktar1 float, Miktar2 float, Miktar3 float, Miktar4 float, HBirim varchar(10)
+    );
+
+    INSERT INTO @TableHamGroup
     SELECT 
-        pd.SKod as hskod,
-        st_ham.Tanim as HSKod_Tanim,
-        ISNULL(rn_m.Tanim, ISNULL(rn_pd.Tanim, '-')) as HRKod_Tanim, 
-        ISNULL(bd_m.Beden, ISNULL(bd_pd.Beden, '-')) as HBeden,
-        RTRIM(pd.Birim) as HBirim,
-        SUM(o.Miktar * pd.Miktar) as Miktar1, 
-        MAX(ISNULL(ms.Bakiye, 0)) as Miktar2,
-        MAX(ISNULL(sas.Bekleyen, 0)) as Miktar3,
-        (SUM(o.Miktar * pd.Miktar) - (MAX(ISNULL(ms.Bakiye, 0)) + MAX(ISNULL(sas.Bekleyen, 0)))) as Miktar4,
-        SUM(o.Miktar * pd.Miktar) as MiktarTop
-    FROM @Orders o
-    JOIN model_PD pd ON RTRIM(pd.ModelKod) = RTRIM(o.ModelKod)
-    JOIN StokKart st_ham ON st_ham.SKod = pd.SKod
-    
-    -- Orijinal SQL CROSS APPLY Mantığına Uyarlama (Proses Kısıtıyla)
-    OUTER APPLY (
-        SELECT TOP 1 r.RKod 
-        FROM Model_PDS2R r 
-        WHERE r.ModelKod = o.ModelKod 
-          AND r.RKod = o.RKod 
-          AND r.Parcainx = pd.Parcainx
-          AND r.Proses = pd.Proses -- Orijinal SQL'deki kritik kısıt
-    ) as mat_r
-    
-    OUTER APPLY (
-        SELECT TOP 1 x.xkod
-        FROM Model_PDS2X x 
-        WHERE x.ModelKod = o.ModelKod 
-          AND x.xkod = o.BedKod 
-          AND x.Parcainx = pd.Parcainx
-          AND x.Proses = pd.Proses -- Orijinal SQL'deki kritik kısıt
-    ) as mat_x
+        pd.skod as hskod, st2.Tanim as HSKod_Tanim, ISNULL(rn2.Renk_kod,0) as HRKod, ISNULL(rn2.Tanim,'') as HRKod_Tanim,
+        Bed2.Bedinx as HBedKod, Bed2.Beden as HBeden,
+        SUM(pd.Miktar * o.Miktar) as Miktar1, 0 as Miktar2, 0 as Miktar3, 0 as Miktar4, pd.Birim
+    FROM @Model_Pd_si pd
+    JOIN @Orders o ON o.xFisno = pd.xFisno AND o.xFinx = pd.xFinx -- Varsayılan eşleşme
+    LEFT OUTER JOIN StokKart st2 ON (st2.SKod=pd.SKod)
+    LEFT OUTER JOIN Dbo.P_RNK_Tip rn2 ON (rn2.Renk_kod=ISNULL(pd.r1, ISNULL(pd.r2, pd.r3)))
+    LEFT OUTER JOIN Dbo.P_Beden_D Bed2 ON (Bed2.Bedinx=ISNULL(pd.b1, ISNULL(pd.b2, pd.b3)))
+    GROUP BY pd.skod, st2.Tanim, rn2.Renk_kod, rn2.Tanim, Bed2.Bedinx, Bed2.Beden, pd.Birim;
 
-    -- Renk & Beden Tanımları (Matris Eşleşmesinden)
-    LEFT JOIN Dbo.P_RNK_Tip rn_m ON rn_m.Renk_kod = mat_r.RKod
-    LEFT JOIN Dbo.P_Beden_D bd_m ON bd_m.Bedinx = mat_x.xkod
-    
-    -- OzKod Yedek (Reçete Satırından)
-    LEFT JOIN Dbo.P_RNK_Tip rn_pd ON rn_pd.Renk_kod = TRY_CAST(pd.OzKod1 AS INT)
-    LEFT JOIN Dbo.P_Beden_D bd_pd ON bd_pd.Bedinx = TRY_CAST(pd.OzKod2 AS INT)
+    -- MEVCUT STOK GÜNCELLEMESİ (StokHareket TABLOSUNDAN)
+    UPDATE th SET Miktar2 = ISNULL((SELECT SUM(Miktar) FROM StokHareket WHERE SKod=th.hskod AND RKod=th.HRKod AND (Location IN (${rLocs})) AND (FisTip<>'Siparis' OR FisTip IS NULL)), 0)
+    FROM @TableHamGroup th;
 
-    -- Bakiye Eşleşmesi (StokHareket verileriyle)
-    LEFT JOIN @MevcutStok ms ON ms.SKod = pd.SKod AND (ms.RKod = mat_r.RKod OR ms.RKod = 0)
-    LEFT JOIN @SatinAlmaStok sas ON sas.SKod = pd.SKod AND (sas.RKod = mat_r.RKod OR sas.RKod = 0)
-    
-    GROUP BY pd.SKod, st_ham.Tanim, rn_m.Tanim, rn_pd.Tanim, bd_m.Beden, bd_pd.Beden, pd.Birim
-    HAVING SUM(o.Miktar * pd.Miktar) > 0
-    ORDER BY pd.SKod;
+    -- BEKLEYEN SATIN ALMA GÜNCELLEMESİ (StokHareket TABLOSUNDAN)
+    UPDATE th SET Miktar3 = ISNULL((SELECT SUM(Miktar) FROM StokHareket WHERE SKod=th.hskod AND RKod=th.HRKod AND (Location IN (${rLocs})) AND (FisTip='Siparis' AND FisTur LIKE '%sa%')), 0)
+    FROM @TableHamGroup th;
+
+    -- NET İHTİYAÇ HESAPLAMA
+    UPDATE @TableHamGroup SET Miktar4 = (Miktar1 - (Miktar2 + Miktar3));
+
+    -- FİNAL SONUÇ SELECT
+    SELECT 
+        hskod, HSKod_Tanim, HRKod, HRKod_Tanim, HBedKod, HBeden, HBirim,
+        Miktar1, Miktar2, Miktar3, Miktar4, Miktar1 as MiktarTop
+    FROM @TableHamGroup
+    WHERE Miktar1 > 0
+    ORDER BY hskod;
   `;
 };
 
