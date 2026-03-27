@@ -50,12 +50,12 @@ const getMrpQuery = (prodLocs, rawLocs) => {
       AND Miktar > 0
     GROUP BY SKod, RKod, BedKod;
 
-    -- 4. TAM MRP ANALİZİ (CROSS APPLY Renk/Beden Matrisi ile)
+    -- 4. TAM MRP ANALİZİ (OUTER APPLY Renk/Beden Matrisi ile)
     SELECT 
         pd.SKod as hskod,
         st_ham.Tanim as HSKod_Tanim,
-        ISNULL(rn_h.Tanim, ISNULL(rn_pd.Tanim, '-')) as HRKod_Tanim, 
-        ISNULL(bd_h.Beden, ISNULL(bd_pd.Beden, '-')) as HBeden,
+        ISNULL(rn_m.Tanim, ISNULL(rn_pd.Tanim, '-')) as HRKod_Tanim, 
+        ISNULL(bd_m.Beden, ISNULL(bd_pd.Beden, '-')) as HBeden,
         RTRIM(pd.Birim) as HBirim,
         SUM(o.Miktar * pd.Miktar) as Miktar1, 
         MAX(ISNULL(ms.Bakiye, 0)) as Miktar2,
@@ -66,36 +66,38 @@ const getMrpQuery = (prodLocs, rawLocs) => {
     JOIN model_PD pd ON RTRIM(pd.ModelKod) = RTRIM(o.ModelKod)
     JOIN StokKart st_ham ON st_ham.SKod = pd.SKod
     
-    -- Orijinal SQL CROSS APPLY Mantığına Uyarlama
+    -- Orijinal SQL CROSS APPLY Mantığına Uyarlama (Proses Kısıtıyla)
     OUTER APPLY (
-        SELECT TOP 1 r.RKod as RKod_Matris 
+        SELECT TOP 1 r.RKod 
         FROM Model_PDS2R r 
         WHERE r.ModelKod = o.ModelKod 
           AND r.RKod = o.RKod 
           AND r.Parcainx = pd.Parcainx
+          AND r.Proses = pd.Proses -- Orijinal SQL'deki kritik kısıt
     ) as mat_r
     
     OUTER APPLY (
-        SELECT TOP 1 x.xkod as BedKod_Matris
+        SELECT TOP 1 x.xkod
         FROM Model_PDS2X x 
         WHERE x.ModelKod = o.ModelKod 
           AND x.xkod = o.BedKod 
           AND x.Parcainx = pd.Parcainx
+          AND x.Proses = pd.Proses -- Orijinal SQL'deki kritik kısıt
     ) as mat_x
 
-    -- Renk & Beden Tanımları (Matristen Gelen)
-    LEFT JOIN Dbo.P_RNK_Tip rn_h ON rn_h.Renk_kod = mat_r.RKod_Matris
-    LEFT JOIN Dbo.P_Beden_D bd_h ON bd_h.Bedinx = mat_x.BedKod_Matris
+    -- Renk & Beden Tanımları (Matris Eşleşmesinden)
+    LEFT JOIN Dbo.P_RNK_Tip rn_m ON rn_m.Renk_kod = mat_r.RKod
+    LEFT JOIN Dbo.P_Beden_D bd_m ON bd_m.Bedinx = mat_x.xkod
     
     -- OzKod Yedek (Reçete Satırından)
     LEFT JOIN Dbo.P_RNK_Tip rn_pd ON rn_pd.Renk_kod = TRY_CAST(pd.OzKod1 AS INT)
     LEFT JOIN Dbo.P_Beden_D bd_pd ON bd_pd.Bedinx = TRY_CAST(pd.OzKod2 AS INT)
 
     -- Bakiye Eşleşmesi (StokHareket verileriyle)
-    LEFT JOIN @MevcutStok ms ON ms.SKod = pd.SKod AND (ms.RKod = mat_r.RKod_Matris OR ms.RKod = 0)
-    LEFT JOIN @SatinAlmaStok sas ON sas.SKod = pd.SKod AND (sas.RKod = mat_r.RKod_Matris OR sas.RKod = 0)
+    LEFT JOIN @MevcutStok ms ON ms.SKod = pd.SKod AND (ms.RKod = mat_r.RKod OR ms.RKod = 0)
+    LEFT JOIN @SatinAlmaStok sas ON sas.SKod = pd.SKod AND (sas.RKod = mat_r.RKod OR sas.RKod = 0)
     
-    GROUP BY pd.SKod, st_ham.Tanim, rn_h.Tanim, rn_pd.Tanim, bd_h.Beden, bd_pd.Beden, pd.Birim
+    GROUP BY pd.SKod, st_ham.Tanim, rn_m.Tanim, rn_pd.Tanim, bd_m.Beden, bd_pd.Beden, pd.Birim
     HAVING SUM(o.Miktar * pd.Miktar) > 0
     ORDER BY pd.SKod;
   `;
